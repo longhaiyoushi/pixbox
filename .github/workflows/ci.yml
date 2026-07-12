@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  quality:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.13"
+          - "3.14"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Nox
+        run: uv tool install nox
+
+      - name: Run Code Lint
+        run: nox -s ruff_check -p ${{ matrix.python-version }}
+
+      - name: Run Code Format
+        run: nox -s ruff_format -p ${{ matrix.python-version }}
+
+      - name: Run Type Check
+        run: nox -s mypy_check -p ${{ matrix.python-version }}
