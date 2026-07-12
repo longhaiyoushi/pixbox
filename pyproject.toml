@@ -7,7 +7,9 @@ authors = [
     { name = "longhaiyoushi", email = "zhangqinghao163@outlook.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.5.1",
+]
 
 [project.scripts]
 pixbox = "pixbox:main"
@@ -30,9 +32,16 @@ indent-style = "space"
 [tool.mypy]
 strict = true
 
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = "ffmpeg"
+
 [dependency-groups]
 dev = [
+    "colour-science>=0.4.7",
+    "ffmpeg-python>=0.2.0",
     "mypy>=2.2.0",
     "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
     "ruff>=0.15.21",
 ]

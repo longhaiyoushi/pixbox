@@ -31,7 +31,10 @@ repos:
     hooks:
     - id: mypy
       args: [--strict]
-      additional_dependencies: []
+      additional_dependencies:
+        - numpy
+        - colour-science
+        - pytest
 
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2
