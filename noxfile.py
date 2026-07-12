@@ -18,11 +18,11 @@ def ruff_check(session: nox.Session):
 @nox.session(python=PYTHON_VERSIONS)
 def ruff_format(session: nox.Session):
     session.install('ruff')
-    session.run('ruff', 'format', '.')
+    session.run('ruff', 'format', '.', '--check')
 
 
 @nox.session(python=PYTHON_VERSIONS)
 def mypy_check(session: nox.Session):
-    session.install('mypy')
     session.run('uv', 'sync', '--frozen', '--no-dev')
-    session.run('mypy', '.', '--strict', external=True)
+    session.install('mypy')
+    session.run('mypy', '.', '--strict')
