@@ -26,10 +26,13 @@ jobs:
         run: uv tool install nox
 
       - name: Run Code Lint
-        run: nox -s ruff_check -p ${{ matrix.python-version }}
+        run: nox -s lint -p ${{ matrix.python-version }}
 
       - name: Run Code Format
-        run: nox -s ruff_format -p ${{ matrix.python-version }}
+        run: nox -s format -p ${{ matrix.python-version }}
 
       - name: Run Type Check
-        run: nox -s mypy_check -p ${{ matrix.python-version }}
+        run: nox -s types -p ${{ matrix.python-version }}
+
+      - name: Run Tests
+        run: nox -s tests -p ${{ matrix.python-version }}

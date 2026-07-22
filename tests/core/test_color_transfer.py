@@ -1,4 +1,4 @@
-from typing import Callable, Type
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -39,7 +39,7 @@ class TestColorTransfer:
     def test_lin2rgb(
         self,
         seed: int,
-        transfer_cls: Type[ColorTransfer],
+        transfer_cls: type[ColorTransfer],
         colour_decode: Callable[[Domain1], Range1],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
@@ -70,7 +70,7 @@ class TestColorTransfer:
     def test_rgb2lin(
         self,
         seed: int,
-        transfer_cls: Type[ColorTransfer],
+        transfer_cls: type[ColorTransfer],
         colour_encode: Callable[[Domain1], Range1],
     ) -> None:
         rng = np.random.default_rng(seed=seed)

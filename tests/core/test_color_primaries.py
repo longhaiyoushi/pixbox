@@ -1,5 +1,3 @@
-from typing import Type
-
 import numpy as np
 import pytest
 from colour.models import (
@@ -38,7 +36,7 @@ class TestColorPrimaries:
         ],
     )
     def test_rgb_xyz_matrix(
-        self, primaries_cls: Type[ColorPrimaries], colour_space: RGB_Colourspace
+        self, primaries_cls: type[ColorPrimaries], colour_space: RGB_Colourspace
     ) -> None:
         color_primaries = primaries_cls()
         np.testing.assert_array_almost_equal(
@@ -61,7 +59,7 @@ class TestColorPrimaries:
         ],
     )
     def test_rgb_yuv_matrix(
-        self, primaries_cls: Type[ColorPrimaries], weights_name: str
+        self, primaries_cls: type[ColorPrimaries], weights_name: str
     ) -> None:
         np.testing.assert_array_almost_equal(
             primaries_cls().matrix_yuv2rgb,
@@ -95,9 +93,9 @@ class TestColorPrimaries:
     def test_rgb2yuv(
         self,
         seed: int,
-        primaries_cls: Type[ColorPrimaries],
+        primaries_cls: type[ColorPrimaries],
         weights_name: str,
-        range_cls: Type[ColorRange],
+        range_cls: type[ColorRange],
         is_legal: bool,
         bits: int,
     ) -> None:
@@ -144,9 +142,9 @@ class TestColorPrimaries:
     def test_yuv2rgb(
         self,
         seed: int,
-        primaries_cls: Type[ColorPrimaries],
+        primaries_cls: type[ColorPrimaries],
         weights_name: str,
-        range_cls: Type[ColorRange],
+        range_cls: type[ColorRange],
         is_legal: bool,
         bits: int,
     ) -> None:

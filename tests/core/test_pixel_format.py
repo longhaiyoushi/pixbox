@@ -1,5 +1,3 @@
-from typing import Type
-
 import ffmpeg
 import numpy as np
 import pytest
@@ -45,10 +43,10 @@ class TestPixelFormat:
     def test_yuv420_to_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV420],
+        pixel_format_cls: type[YUV420],
         from_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(6, 4), dtype=dtype) << (bits - 8)
@@ -98,10 +96,10 @@ class TestPixelFormat:
     def test_yuv420_from_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV420],
+        pixel_format_cls: type[YUV420],
         to_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
@@ -148,10 +146,10 @@ class TestPixelFormat:
     def test_yuv422_to_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV422],
+        pixel_format_cls: type[YUV422],
         from_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(8, 4), dtype=dtype) << (bits - 8)
@@ -201,10 +199,10 @@ class TestPixelFormat:
     def test_yuv422_from_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV420],
+        pixel_format_cls: type[YUV420],
         to_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
@@ -251,10 +249,10 @@ class TestPixelFormat:
     def test_yuv444_to_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV422],
+        pixel_format_cls: type[YUV422],
         from_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(12, 4), dtype=dtype) << (bits - 8)
@@ -304,10 +302,10 @@ class TestPixelFormat:
     def test_yuv444_from_yuv(
         self,
         seed: int,
-        pixel_format_cls: Type[YUV420],
+        pixel_format_cls: type[YUV420],
         to_format: str,
         bits: int,
-        dtype: Type[np.uint8 | np.uint16],
+        dtype: type[np.uint8 | np.uint16],
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
@@ -346,7 +344,7 @@ class TestPixelFormat:
     def test_rgb24_to_rgb(
         self,
         seed: int,
-        pixel_format_cls: Type[RGBFormat],
+        pixel_format_cls: type[RGBFormat],
         from_format: str,
     ) -> None:
         rng = np.random.default_rng(seed=seed)
@@ -383,7 +381,7 @@ class TestPixelFormat:
     def test_rgb24_from_rgb(
         self,
         seed: int,
-        pixel_format_cls: Type[RGBFormat],
+        pixel_format_cls: type[RGBFormat],
         to_format: str,
     ) -> None:
         rng = np.random.default_rng(seed=seed)

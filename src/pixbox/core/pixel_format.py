@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar, Type
+from typing import Any, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -49,7 +49,7 @@ class YUVFormat(PixelFormat):
             return math.ceil(self.bits / 8)
 
     @property
-    def dtype(self) -> Type[np.uint8 | np.uint16]:
+    def dtype(self) -> type[np.uint8 | np.uint16]:
         if self.bits <= 8:
             return np.uint8
         elif self.bits <= 16:

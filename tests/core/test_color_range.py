@@ -1,5 +1,3 @@
-from typing import Type
-
 import numpy as np
 import pytest
 from colour.models.rgb.ycbcr import (
@@ -24,7 +22,7 @@ class TestColorRange:
         [8, 10],
     )
     def test_range_parameters(
-        self, range_cls: Type[ColorRange], is_legal: bool, bits: int
+        self, range_cls: type[ColorRange], is_legal: bool, bits: int
     ) -> None:
         color_range = range_cls(bits)
         y_min, y_max, c_min, c_max = ranges_YCbCr(bits, is_legal, False)
