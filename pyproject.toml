@@ -7,7 +7,9 @@ authors = [
     { name = "longhaiyoushi", email = "zhangqinghao163@outlook.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.5.1",
+]
 
 [project.scripts]
 pixbox = "pixbox:main"
@@ -21,7 +23,14 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [tool.ruff]
+target-version = "py312"
 line-length = 80
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pixbox"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -30,9 +39,32 @@ indent-style = "space"
 [tool.mypy]
 strict = true
 
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = "ffmpeg"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 [dependency-groups]
 dev = [
+    "colour-science>=0.4.7",
+    "ffmpeg-python>=0.2.0",
     "mypy>=2.2.0",
     "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.15.21",
 ]
