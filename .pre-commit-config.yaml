@@ -47,7 +47,10 @@ repos:
     rev: v2.4.2
     hooks:
     - id: codespell
-      additional_dependencies: [tomli]
+      exclude: ^pixbox\.spec$
+      additional_dependencies:
+        - tomli
+        - "-i https://pypi.tuna.tsinghua.edu.cn/simple"
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.16.4
