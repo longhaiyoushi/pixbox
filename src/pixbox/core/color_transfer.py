@@ -19,10 +19,10 @@ class ColorTransfer:
             'OETF not implemented for this color transfer function.'
         )
 
-    def lin2rgb(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+    def rgb2lin(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
         return self.eotf(value)
 
-    def rgb2lin(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+    def lin2rgb(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
         return self.oetf(value)
 
 
