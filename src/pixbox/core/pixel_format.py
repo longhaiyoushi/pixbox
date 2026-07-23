@@ -841,5 +841,39 @@ class BGR24(RGBFormat):
 
 
 @dataclass
+class RGBF32(RGBFormat):
+    def __post_init__(self) -> None:
+        self.stride = max(self.stride, self.width * 12)
+
+    @property
+    def bits_per_pixel(self) -> int:
+        return 96
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride * 12
+
+    def data2key(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+        return self.to_rgb(value)
+
+    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+        return self.from_rgb(value)
+
+    def to_rgb(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.reshape((self.height, -1, 3))
+        value = value[: self.height, : self.width, :]
+        return value
+
+    def from_rgb(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.reshape((self.height, self.width, 3))
+        value = np.pad(
+            value,
+            ((0, self.stride // 12 - self.width), (0, 0), (0, 0)),
+            constant_values=0,
+        )
+        return value
+
+
+@dataclass
 class XYZFormat(PixelFormat):
     pass
