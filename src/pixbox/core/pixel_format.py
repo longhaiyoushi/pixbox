@@ -57,14 +57,10 @@ class YUVFormat(PixelFormat):
         raise ValueError(f'Unsupported bit depth: {self.bits}.')
 
     def data2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
-        value = np.astype((self.to_yuv(value) / (2**self.bits - 1)), np.float32)
-        value[:, :, 1:] -= np.float32(0.5)
-        return value
+        return np.astype((self.to_yuv(value) / (2**self.bits - 1)), np.float32)
 
     def key2data(self, value: NDArray[np.float32]) -> NDArray[Any]:
-        value[:, :, 1:] += np.float32(0.5)
-        value = self.from_yuv(np.astype(value * (2**self.bits - 1), self.dtype))
-        return value
+        return self.from_yuv(np.astype(value * (2**self.bits - 1), self.dtype))
 
     def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
         raise NotImplementedError(
