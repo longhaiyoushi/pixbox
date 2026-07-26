@@ -68,7 +68,7 @@ class ColorPrimaries:
     ) -> NDArray[np.float32]:
         if color_transfer is not None:
             rgb = color_transfer.rgb2lin(rgb)
-        xyz = self.matrix_rgb2xyz @ rgb
+        xyz = rgb @ self.matrix_rgb2xyz.T
         return xyz
 
     def xyz2rgb(
@@ -76,7 +76,7 @@ class ColorPrimaries:
         xyz: NDArray[np.float32],
         color_transfer: ColorTransfer | None = None,
     ) -> NDArray[np.float32]:
-        rgb = self.matrix_xyz2rgb @ xyz
+        rgb = xyz @ self.matrix_xyz2rgb.T
         if color_transfer is not None:
             rgb = color_transfer.lin2rgb(rgb)
         return rgb
@@ -84,7 +84,7 @@ class ColorPrimaries:
     def rgb2yuv(
         self, rgb: NDArray[np.float32], color_range: ColorRange | None = None
     ) -> NDArray[np.float32]:
-        yuv = self.matrix_rgb2yuv @ rgb
+        yuv = rgb @ self.matrix_rgb2yuv.T
         if color_range is not None:
             yuv = yuv * color_range.scale + color_range.offset
         return yuv
@@ -94,7 +94,7 @@ class ColorPrimaries:
     ) -> NDArray[np.float32]:
         if color_range is not None:
             yuv = (yuv - color_range.offset) / color_range.scale
-        rgb = self.matrix_yuv2rgb @ yuv
+        rgb = yuv @ self.matrix_yuv2rgb.T
         return rgb
 
 

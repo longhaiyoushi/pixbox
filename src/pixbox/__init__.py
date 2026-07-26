@@ -1,2 +1,5 @@
+from pixbox.gui.color_player import main as gui_main
+
+
 def main() -> None:
-    print('Hello from pixbox!')
+    gui_main()

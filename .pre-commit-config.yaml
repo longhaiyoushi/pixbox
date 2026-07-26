@@ -33,8 +33,10 @@ repos:
       args: [--strict]
       additional_dependencies:
         - numpy
+        - pyside6
         - colour-science
         - pytest
+        - "-i https://pypi.tuna.tsinghua.edu.cn/simple"
 
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2

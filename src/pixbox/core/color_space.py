@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -47,12 +47,18 @@ class ColorSpace:
     def yuv2rgb(self, yuv: NDArray[np.float32]) -> NDArray[np.float32]:
         return self.color_primaries.yuv2rgb(yuv, self.color_range)
 
-    def convert2rgb(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
-        value = self.pixel_format.data2key(value)
+    def data2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
+        return self.pixel_format.data2key(value)
+
+    def key2data(self, value: NDArray[np.float32]) -> NDArray[Any]:
+        return self.pixel_format.key2data(value)
+
+    def convert2rgb(self, value: NDArray[Any]) -> NDArray[np.float32]:
+        value = self.data2key(value)
         if isinstance(self.pixel_format, YUVFormat):
-            value = self.color_primaries.yuv2rgb(value, self.color_range)
+            value = self.yuv2rgb(value)
         elif isinstance(self.pixel_format, XYZFormat):
-            value = self.color_primaries.xyz2rgb(value, self.color_transfer)
+            value = self.xyz2rgb(value)
         return value
 
 
