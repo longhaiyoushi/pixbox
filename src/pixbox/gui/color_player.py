@@ -1,6 +1,7 @@
 import math
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -8,6 +9,7 @@ from PySide6.QtGui import (
     QAction,
     QDragEnterEvent,
     QDropEvent,
+    QIcon,
     QImage,
     QKeyEvent,
     QPixmap,
@@ -642,8 +644,16 @@ class MainWindow(QMainWindow):
             self.display_current_frame()
 
 
+def get_icon_path(filename: str) -> Path:
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS) / 'resource' / filename
+    return Path(__file__).parent.parent.parent.parent / 'resource' / filename
+
+
 def main() -> None:
     app = QApplication.instance() or QApplication([])
+    app = cast(QApplication, app)
+    app.setWindowIcon(QIcon(str(get_icon_path('pixbox.ico'))))
     window = MainWindow()
     window.show()
     app.exec()
