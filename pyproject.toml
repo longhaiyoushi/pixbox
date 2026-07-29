@@ -1,6 +1,5 @@
 [project]
 name = "pixbox"
-version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -12,13 +11,18 @@ dependencies = [
     "numpy>=2.5.1",
     "pyside6>=6.11.1",
 ]
+dynamic = ["version"]
 
 [project.scripts]
 pixbox = "pixbox:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "v(?P<version>.*)"
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

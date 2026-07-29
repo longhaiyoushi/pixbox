@@ -27,7 +27,7 @@ jobs:
         env:
           APP_VERSION: ${{ github.ref_name }}
         run: |
-          python -m pyinstaller --clean pixbox.spec --name "pixbox-$env:APP_VERSION"
+          uv run pyinstaller --clean pixbox.spec
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

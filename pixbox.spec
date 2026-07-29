@@ -1,5 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+
+app_version = os.getenv('APP_VERSION', 'dev')
+app_name = f'pixbox-{app_version}'
 
 a = Analysis(
     ['src\\pixbox\\__main__.py'],
@@ -22,7 +26,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='pixbox',
+    name=app_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
