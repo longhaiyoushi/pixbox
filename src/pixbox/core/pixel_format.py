@@ -453,10 +453,6 @@ class YUV422(YUVFormat):
 class YUV422Planar(YUV422):
     pass
 
-    @property
-    def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 2
-
 
 @dataclass
 class YUV422_I422(YUV422Planar):
@@ -561,10 +557,6 @@ class YUV422_YV16(YUV422Planar):
 @dataclass
 class YUV422SemiPlanar(YUV422):
     pass
-
-    @property
-    def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 2
 
 
 @dataclass
