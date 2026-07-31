@@ -429,9 +429,19 @@ class MainWindow(QMainWindow):
         self.open_file(filename)
 
     def open_file(self, filename: str) -> None:
+        dialog = SettingsDialog(self.current_format, self.fps, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.fps = dialog.fps()
+        self.update_timer_interval()
+
+        data_format = dialog.data_format()
+        self.current_format = data_format
+
         if self.current_file != Path(filename):
             self.current_file = Path(filename)
-        self.on_setup()
+            self.apply_format()
 
     def on_setup(self) -> None:
         dialog = SettingsDialog(self.current_format, self.fps, self)
@@ -444,22 +454,23 @@ class MainWindow(QMainWindow):
         data_format = dialog.data_format()
         if self.current_format != data_format:
             self.current_format = data_format
-            self.apply_format(self.current_format)
+            if self.current_file:
+                self.apply_format()
 
-    def apply_format(self, data_format: dict[str, Any]) -> None:
-        if self.current_file is None:
+    def apply_format(self) -> None:
+        if not self.current_format or not self.current_file:
             return
 
         color_space = build_color_space(
-            color_primary=data_format['primary'],
-            color_transfer=data_format['transfer'],
-            color_range=data_format['range'],
-            pixel_format=data_format['format'],
-            height=data_format['height'],
-            width=data_format['width'],
-            stride=data_format['stride'],
-            bits=data_format['bits'],
-            expanded=data_format['expanded'],
+            color_primary=self.current_format['primary'],
+            color_transfer=self.current_format['transfer'],
+            color_range=self.current_format['range'],
+            pixel_format=self.current_format['format'],
+            height=self.current_format['height'],
+            width=self.current_format['width'],
+            stride=self.current_format['stride'],
+            bits=self.current_format['bits'],
+            expanded=self.current_format['expanded'],
         )
 
         self.raw_bytes = np.memmap(self.current_file, dtype=np.uint8, mode='r')
