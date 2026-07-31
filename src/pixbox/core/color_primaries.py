@@ -1,6 +1,7 @@
 # https://www.itu.int/rec/R-REC-BT/en
 # https://registry.color.org/rgb-registry/
 
+import functools
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -19,47 +20,32 @@ class ColorPrimaries:
     blue: ClassVar[NDArray[np.float32]]
     white: ClassVar[NDArray[np.float32]]
 
-    _matrix_rgb2xyz: NDArray[np.float32] | None = None
-    _matrix_xyz2rgb: NDArray[np.float32] | None = None
-    _matrix_rgb2yuv: NDArray[np.float32] | None = None
-    _matrix_yuv2rgb: NDArray[np.float32] | None = None
-
-    @property
+    @functools.cached_property
     def matrix_rgb2xyz(self) -> NDArray[np.float32]:
-        if self._matrix_rgb2xyz is None:
-            primaries = np.array(
-                [self.red, self.green, self.blue], np.float32
-            ).T
-            white_xyz = self.white / self.white[1]
-            scale = np.linalg.solve(primaries, white_xyz)
-            self._matrix_rgb2xyz = primaries @ np.diag(scale)
-        return self._matrix_rgb2xyz
+        primaries = np.array([self.red, self.green, self.blue], np.float32).T
+        white_xyz = self.white / self.white[1]
+        scale = np.linalg.solve(primaries, white_xyz)
+        return scale * primaries
 
-    @property
+    @functools.cached_property
     def matrix_xyz2rgb(self) -> NDArray[np.float32]:
-        if self._matrix_xyz2rgb is None:
-            self._matrix_xyz2rgb = np.linalg.inv(self.matrix_rgb2xyz)
-        return self._matrix_xyz2rgb
+        return np.linalg.inv(self.matrix_rgb2xyz)
 
-    @property
+    @functools.cached_property
     def matrix_rgb2yuv(self) -> NDArray[np.float32]:
-        if self._matrix_rgb2yuv is None:
-            kr, kg, kb = self.matrix_rgb2xyz[1, :]
-            self._matrix_rgb2yuv = np.array(
-                [
-                    [kr, kg, kb],
-                    [-0.5 * kr / (1.0 - kb), -0.5 * kg / (1.0 - kb), 0.5],
-                    [0.5, -0.5 * kg / (1.0 - kr), -0.5 * kb / (1.0 - kr)],
-                ],
-                np.float32,
-            )
-        return self._matrix_rgb2yuv
+        kr, kg, kb = self.matrix_rgb2xyz[1, :]
+        return np.array(
+            [
+                [kr, kg, kb],
+                [-0.5 * kr / (1.0 - kb), -0.5 * kg / (1.0 - kb), 0.5],
+                [0.5, -0.5 * kg / (1.0 - kr), -0.5 * kb / (1.0 - kr)],
+            ],
+            np.float32,
+        )
 
-    @property
+    @functools.cached_property
     def matrix_yuv2rgb(self) -> NDArray[np.float32]:
-        if self._matrix_yuv2rgb is None:
-            self._matrix_yuv2rgb = np.linalg.inv(self.matrix_rgb2yuv)
-        return self._matrix_yuv2rgb
+        return np.linalg.inv(self.matrix_rgb2yuv)
 
     def rgb2xyz(
         self,

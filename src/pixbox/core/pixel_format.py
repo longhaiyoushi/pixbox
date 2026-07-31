@@ -1,3 +1,4 @@
+import functools
 import math
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -12,6 +13,15 @@ class PixelFormat:
     height: int
     width: int
     stride: int = 0
+
+    def __post_init__(self) -> None:
+        self.stride = max(self.stride, self.pitch)
+
+    @property
+    def pitch(self) -> int:
+        raise NotImplementedError(
+            'pitch not implemented for this pixel format.'
+        )
 
     @property
     def bits_per_pixel(self) -> int:  # bpp
@@ -41,14 +51,18 @@ class YUVFormat(PixelFormat):
     bits: int = 8
     expanded: bool = True
 
-    @property
+    @functools.cached_property
+    def pitch(self) -> int:
+        return int(self.width * self.item_size)
+
+    @functools.cached_property
     def item_size(self) -> float:
         size = self.bits / 8
         if self.expanded:
             size = math.ceil(size)
         return size
 
-    @property
+    @functools.cached_property
     def dtype(self) -> type[np.uint8 | np.uint16 | np.float16 | np.float32]:
         if self.bits <= 8:
             return np.uint8
@@ -77,14 +91,11 @@ class YUVFormat(PixelFormat):
 class GRAY(YUVFormat):
     name: ClassVar[str] = 'GRAY'
 
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
-
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
         return int(self.item_size * 8)
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
@@ -113,10 +124,7 @@ class GRAY(YUVFormat):
 class GRAYF(YUVFormat):
     name: ClassVar[str] = 'GRAYF'
 
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
-
-    @property
+    @functools.cached_property
     def dtype(self) -> type[np.float16 | np.float32]:
         if self.bits == 16:
             return np.float16
@@ -124,11 +132,11 @@ class GRAYF(YUVFormat):
             return np.float32
         raise ValueError(f'Unsupported bit depth: {self.bits}.')
 
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
         return int(self.item_size * 8)
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
@@ -161,19 +169,18 @@ class GRAYF(YUVFormat):
 
 @dataclass
 class YUV420(YUVFormat):
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
-        return int(self.item_size * 8 * 3 // 2)
+        return int(self.item_size * 12)
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride * 3 // 2
 
 
 @dataclass
 class YUV420Planar(YUV420):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
 
 @dataclass
@@ -310,8 +317,7 @@ class YUV420_YV12(YUV420Planar):
 
 @dataclass
 class YUV420SemiPlanar(YUV420):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
 
 @dataclass
@@ -434,15 +440,18 @@ class YUV420_NV21(YUV420SemiPlanar):
 
 @dataclass
 class YUV422(YUVFormat):
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
-        return int(self.item_size * 8 * 2)
+        return int(self.item_size * 16)
+
+    @functools.cached_property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride * 2
 
 
 @dataclass
 class YUV422Planar(YUV422):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
     @property
     def bytes_per_frame(self) -> int:
@@ -551,8 +560,7 @@ class YUV422_YV16(YUV422Planar):
 
 @dataclass
 class YUV422SemiPlanar(YUV422):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
     @property
     def bytes_per_frame(self) -> int:
@@ -647,10 +655,11 @@ class YUV422_NV61(YUV422SemiPlanar):
 
 @dataclass
 class YUV422Packed(YUV422):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size * 2))
+    @functools.cached_property
+    def pitch(self) -> int:
+        return int(self.width * self.item_size * 2)
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
@@ -813,19 +822,18 @@ class YUV422_VYUY(YUV422Packed):
 
 @dataclass
 class YUV444(YUVFormat):
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
-        return int(self.item_size * 8 * 3)
+        return int(self.item_size * 24)
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride * 3
 
 
 @dataclass
 class YUV444Planar(YUV444):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
 
 @dataclass
@@ -918,8 +926,7 @@ class YUV444_YV24(YUV444Planar):
 
 @dataclass
 class YUV444SemiPlanar(YUV444):
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, int(self.width * self.item_size))
+    pass
 
 
 @dataclass
@@ -1013,14 +1020,15 @@ class RGBFormat(PixelFormat):
 class RGB24(RGBFormat):
     name: ClassVar[str] = 'RGB24'
 
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, self.width * 3)
+    @functools.cached_property
+    def pitch(self) -> int:
+        return self.width * 3
 
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
         return 24
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
@@ -1049,14 +1057,15 @@ class RGB24(RGBFormat):
 class BGR24(RGBFormat):
     name: ClassVar[str] = 'BGR24'
 
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, self.width * 3)
+    @functools.cached_property
+    def pitch(self) -> int:
+        return self.width * 3
 
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
         return 24
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
@@ -1085,14 +1094,15 @@ class BGR24(RGBFormat):
 class RGBF32(RGBFormat):
     name: ClassVar[str] = 'RGBF32'
 
-    def __post_init__(self) -> None:
-        self.stride = max(self.stride, self.width * 12)
+    @functools.cached_property
+    def pitch(self) -> int:
+        return self.width * 12
 
-    @property
+    @functools.cached_property
     def bits_per_pixel(self) -> int:
         return 96
 
-    @property
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
