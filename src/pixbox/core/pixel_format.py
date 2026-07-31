@@ -75,6 +75,8 @@ class YUVFormat(PixelFormat):
 
 @dataclass
 class GRAY(YUVFormat):
+    name: ClassVar[str] = 'GRAY'
+
     def __post_init__(self) -> None:
         self.stride = max(self.stride, int(self.width * self.item_size))
 
@@ -109,6 +111,8 @@ class GRAY(YUVFormat):
 
 @dataclass
 class GRAYF(YUVFormat):
+    name: ClassVar[str] = 'GRAYF'
+
     def __post_init__(self) -> None:
         self.stride = max(self.stride, int(self.width * self.item_size))
 
@@ -434,15 +438,15 @@ class YUV422(YUVFormat):
     def bits_per_pixel(self) -> int:
         return int(self.item_size * 8 * 2)
 
-    @property
-    def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 2
-
 
 @dataclass
 class YUV422Planar(YUV422):
     def __post_init__(self) -> None:
         self.stride = max(self.stride, int(self.width * self.item_size))
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride * 2
 
 
 @dataclass
@@ -550,6 +554,10 @@ class YUV422SemiPlanar(YUV422):
     def __post_init__(self) -> None:
         self.stride = max(self.stride, int(self.width * self.item_size))
 
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride * 2
+
 
 @dataclass
 class YUV422_NV16(YUV422SemiPlanar):
@@ -639,17 +647,168 @@ class YUV422_NV61(YUV422SemiPlanar):
 
 @dataclass
 class YUV422Packed(YUV422):
-    pass
+    def __post_init__(self) -> None:
+        self.stride = max(self.stride, int(self.width * self.item_size * 2))
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride
+
+
+@dataclass
+class YUV422_YUYV(YUV422Packed):
+    name: ClassVar[str] = 'YUV422_YUYV'
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, : self.stride : 2]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        uv8 = value8[: self.height :, 1 : self.stride : 2]
+        uv = uv8.view(self.dtype).reshape((self.height, -1))
+        u = uv[: self.height, : self.width : 2].repeat(2, axis=1)
+        v = uv[: self.height, 1 : self.width : 2].repeat(2, axis=1)
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        u = np.astype(
+            u.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        v = np.astype(
+            v.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        uv = np.dstack((u, v))
+        value = np.stack((y.ravel(), uv.ravel()), axis=-1)
+        value8 = value.view(np.uint8).reshape((self.height, -1))
+        value8 = np.pad(
+            value8,
+            ((0, self.stride - value8.shape[1]), (0, 0)),
+            constant_values=1 << (self.bits - 1),
+        )
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
+
+
+@dataclass
+class YUV422_YVYU(YUV422Packed):
+    name: ClassVar[str] = 'YUV422_YVYU'
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, : self.stride : 2]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        uv8 = value8[: self.height :, 1 : self.stride : 2]
+        uv = uv8.view(self.dtype).reshape((self.height, -1))
+        v = uv[: self.height, : self.width : 2].repeat(2, axis=1)
+        u = uv[: self.height, 1 : self.width : 2].repeat(2, axis=1)
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        u = np.astype(
+            u.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        v = np.astype(
+            v.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        uv = np.dstack((v, u))
+        value = np.stack((y.ravel(), uv.ravel()), axis=-1)
+        value8 = value.view(np.uint8).reshape((self.height, -1))
+        value8 = np.pad(
+            value8,
+            ((0, self.stride - value8.shape[1]), (0, 0)),
+            constant_values=1 << (self.bits - 1),
+        )
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
 
 
 @dataclass
 class YUV422_UYVY(YUV422Packed):
-    pass
+    name: ClassVar[str] = 'YUV422_UYVY'
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, 1 : self.stride : 2]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        uv8 = value8[: self.height :, : self.stride : 2]
+        uv = uv8.view(self.dtype).reshape((self.height, -1))
+        u = uv[: self.height, : self.width : 2].repeat(2, axis=1)
+        v = uv[: self.height, 1 : self.width : 2].repeat(2, axis=1)
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        u = np.astype(
+            u.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        v = np.astype(
+            v.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        uv = np.dstack((u, v))
+        value = np.stack((uv.ravel(), y.ravel()), axis=-1)
+        value8 = value.view(np.uint8).reshape((self.height, -1))
+        value8 = np.pad(
+            value8,
+            ((0, self.stride - value8.shape[1]), (0, 0)),
+            constant_values=1 << (self.bits - 1),
+        )
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
 
 
 @dataclass
 class YUV422_VYUY(YUV422Packed):
-    pass
+    name: ClassVar[str] = 'YUV422_VYUY'
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, 1 : self.stride : 2]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        uv8 = value8[: self.height :, : self.stride : 2]
+        uv = uv8.view(self.dtype).reshape((self.height, -1))
+        v = uv[: self.height, : self.width : 2].repeat(2, axis=1)
+        u = uv[: self.height, 1 : self.width : 2].repeat(2, axis=1)
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        u = np.astype(
+            u.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        v = np.astype(
+            v.reshape((self.height, self.width // 2, 2)).mean(axis=2) + 0.5,
+            self.dtype,
+        )
+        uv = np.dstack((v, u))
+        value = np.stack((uv.ravel(), y.ravel()), axis=-1)
+        value8 = value.view(np.uint8).reshape((self.height, -1))
+        value8 = np.pad(
+            value8,
+            ((0, self.stride - value8.shape[1]), (0, 0)),
+            constant_values=1 << (self.bits - 1),
+        )
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
 
 
 @dataclass
@@ -852,6 +1011,8 @@ class RGBFormat(PixelFormat):
 
 @dataclass
 class RGB24(RGBFormat):
+    name: ClassVar[str] = 'RGB24'
+
     def __post_init__(self) -> None:
         self.stride = max(self.stride, self.width * 3)
 
@@ -886,6 +1047,8 @@ class RGB24(RGBFormat):
 
 @dataclass
 class BGR24(RGBFormat):
+    name: ClassVar[str] = 'BGR24'
+
     def __post_init__(self) -> None:
         self.stride = max(self.stride, self.width * 3)
 
@@ -920,6 +1083,8 @@ class BGR24(RGBFormat):
 
 @dataclass
 class RGBF32(RGBFormat):
+    name: ClassVar[str] = 'RGBF32'
+
     def __post_init__(self) -> None:
         self.stride = max(self.stride, self.width * 12)
 
