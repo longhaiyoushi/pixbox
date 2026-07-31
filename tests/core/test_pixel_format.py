@@ -4,6 +4,7 @@ import pytest
 
 from pixbox.core.pixel_format import (
     BGR24,
+    GRAY,
     RGB24,
     YUV420,
     YUV420_I420,
@@ -21,6 +22,131 @@ from pixbox.core.pixel_format import (
 
 
 class TestPixelFormat:
+    @pytest.mark.parametrize(
+        'seed',
+        range(5),
+    )
+    @pytest.mark.parametrize(
+        ('pixel_format_cls', 'from_format', 'bits', 'dtype'),
+        [
+            (GRAY, 'gray', 8, np.uint8),
+            (GRAY, 'gray9le', 9, np.uint16),
+            (GRAY, 'gray10le', 10, np.uint16),
+            (GRAY, 'gray12le', 12, np.uint16),
+            (GRAY, 'gray14le', 14, np.uint16),
+            (GRAY, 'gray16le', 16, np.uint16),
+        ],
+    )
+    def test_gray_to_yuv(
+        self,
+        seed: int,
+        pixel_format_cls: type[GRAY],
+        from_format: str,
+        bits: int,
+        dtype: type[np.uint8 | np.uint16],
+    ) -> None:
+        rng = np.random.default_rng(seed=seed)
+        value = rng.integers(256, size=(4, 4), dtype=dtype) << (bits - 8)
+        print(value)
+
+        pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+        assert len(value.tobytes()) == pixel_format.bytes_per_frame
+
+        actual = pixel_format.to_yuv(value)
+        actual = actual / (2**bits - 1)
+
+        out, _ = (
+            ffmpeg.input(
+                'pipe:',
+                f='rawvideo',
+                pix_fmt=from_format,
+                s='4x4',
+                color_range='pc',
+            )
+            .output(
+                'pipe:',
+                f='rawvideo',
+                pix_fmt='yuv444p',
+                vframes=1,
+                color_range='pc',
+            )
+            .run(input=value.tobytes(), capture_stdout=True)
+        )
+
+        desired = (
+            np.frombuffer(out, dtype=np.uint8)
+            .reshape((3, 4, 4))
+            .transpose((1, 2, 0))
+        ).astype(dtype)
+        desired = desired << (bits - 8)  # type: ignore[operator]
+        desired = desired / (2**bits - 1)
+
+        np.testing.assert_array_almost_equal(
+            actual,
+            desired,
+            decimal=2,
+        )
+
+    @pytest.mark.parametrize(
+        'seed',
+        range(5),
+    )
+    @pytest.mark.parametrize(
+        ('to_format', 'bits', 'dtype'),
+        [
+            ('gray', 8, np.uint8),
+            ('gray9le', 9, np.uint16),
+            ('gray10le', 10, np.uint16),
+            ('gray12le', 12, np.uint16),
+            ('gray14le', 14, np.uint16),
+            ('gray16le', 16, np.uint16),
+        ],
+    )
+    def test_gray_from_yuv(
+        self,
+        seed: int,
+        to_format: str,
+        bits: int,
+        dtype: type[np.uint8 | np.uint16],
+    ) -> None:
+        rng = np.random.default_rng(seed=seed)
+        value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
+
+        pixel_format = GRAY(height=4, width=4, bits=bits)
+
+        actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
+        actual = actual / (2**bits - 1)
+
+        out, _ = (
+            ffmpeg.input(
+                'pipe:',
+                f='rawvideo',
+                pix_fmt='yuv444p',
+                s='4x4',
+                color_range='pc',
+            )
+            .output(
+                'pipe:',
+                f='rawvideo',
+                pix_fmt=to_format,
+                vframes=1,
+                color_range='pc',
+            )
+            .run(
+                input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
+            )
+        )
+        assert len(out) == pixel_format.bytes_per_frame
+
+        desired = np.frombuffer(out, dtype=dtype).reshape((4, 4))
+        desired = desired / (2**bits - 1)
+
+        np.testing.assert_array_almost_equal(
+            actual,
+            desired,
+            decimal=2,
+        )
+
     @pytest.mark.parametrize(
         'seed',
         range(5),
@@ -420,3 +546,12 @@ class TestPixelFormat:
             desired,
             decimal=3,
         )
+
+
+# TestPixelFormat().test_grayf_to_yuv(0, GRAYF, 'grayf16le', 16, np.float16)
+# TestPixelFormat().test_gray_to_rgb(0, GRAY, 'gray', 8, np.uint8)
+# TestPixelFormat().test_gray_to_yuv(0, 'gray9le', 9, np.uint16)
+# TestPixelFormat().test_gray_to_rgb(0, GRAY, 'gray32le', 32, np.uint32)
+# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray', 8, np.uint8)
+# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray9le', 9, np.uint16)
+# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray10le', 10, np.uint16)
