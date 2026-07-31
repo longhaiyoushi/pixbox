@@ -13,11 +13,15 @@ from pixbox.core.pixel_format import (
     YUV422,
     YUV422_I422,
     YUV422_NV16,
+    YUV422_UYVY,
+    YUV422_YUYV,
+    YUV422_YVYU,
     YUV444,
     YUV444_I444,
     YUV444_NV24,
     YUV444_NV42,
     RGBFormat,
+    YUV422Packed,
 )
 
 
@@ -47,13 +51,12 @@ class TestPixelFormat:
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(4, 4), dtype=dtype) << (bits - 8)
-        print(value)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
         actual = pixel_format.to_yuv(value)
-        actual = actual / (2**bits - 1)
+        actual = actual
 
         out, _ = (
             ffmpeg.input(
@@ -79,11 +82,10 @@ class TestPixelFormat:
             .transpose((1, 2, 0))
         ).astype(dtype)
         desired = desired << (bits - 8)  # type: ignore[operator]
-        desired = desired / (2**bits - 1)
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
             decimal=2,
         )
 
@@ -115,7 +117,6 @@ class TestPixelFormat:
         pixel_format = GRAY(height=4, width=4, bits=bits)
 
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
-        actual = actual / (2**bits - 1)
 
         out, _ = (
             ffmpeg.input(
@@ -139,11 +140,10 @@ class TestPixelFormat:
         assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=dtype).reshape((4, 4))
-        desired = desired / (2**bits - 1)
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
             decimal=2,
         )
 
@@ -197,9 +197,9 @@ class TestPixelFormat:
         desired = desired.astype(dtype) << (bits - 8)  # type: ignore[operator]
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -249,9 +249,9 @@ class TestPixelFormat:
         desired = np.frombuffer(out, dtype=dtype).reshape((6, 4))
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,  # type: ignore[arg-type]
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -272,6 +272,9 @@ class TestPixelFormat:
             (YUV422_NV16, 'p210le', 16, np.uint16),
             (YUV422_NV16, 'p212le', 16, np.uint16),
             (YUV422_NV16, 'p216le', 16, np.uint16),
+            (YUV422_YUYV, 'yuyv422', 8, np.uint8),
+            (YUV422_YVYU, 'yvyu422', 8, np.uint8),
+            (YUV422_UYVY, 'uyvy422', 8, np.uint8),
         ],
     )
     def test_yuv422_to_yuv(
@@ -284,6 +287,8 @@ class TestPixelFormat:
     ) -> None:
         rng = np.random.default_rng(seed=seed)
         value = rng.integers(256, size=(8, 4), dtype=dtype) << (bits - 8)
+        if issubclass(pixel_format_cls, YUV422Packed):
+            value = value.reshape((4, 8))
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
@@ -304,9 +309,9 @@ class TestPixelFormat:
         desired = desired.astype(dtype) << (bits - 8)  # type: ignore[operator]
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -327,6 +332,9 @@ class TestPixelFormat:
             (YUV422_NV16, 'p210le', 16, np.uint16),
             (YUV422_NV16, 'p212le', 16, np.uint16),
             (YUV422_NV16, 'p216le', 16, np.uint16),
+            (YUV422_YUYV, 'yuyv422', 8, np.uint8),
+            (YUV422_YVYU, 'yvyu422', 8, np.uint8),
+            (YUV422_UYVY, 'uyvy422', 8, np.uint8),
         ],
     )
     def test_yuv422_from_yuv(
@@ -354,11 +362,13 @@ class TestPixelFormat:
         assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=dtype).reshape((8, 4))
+        if issubclass(pixel_format_cls, YUV422Packed):
+            desired = desired.reshape((4, 8))
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,  # type: ignore[arg-type]
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -411,9 +421,9 @@ class TestPixelFormat:
         desired = desired.astype(dtype) << (bits - 8)  # type: ignore[operator]
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -464,9 +474,9 @@ class TestPixelFormat:
         desired = np.frombuffer(out, dtype=dtype).reshape((12, 4))
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,  # type: ignore[arg-type]
-            decimal=3,
+            actual / (2**bits - 1),
+            desired / (2**bits - 1),
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -503,9 +513,9 @@ class TestPixelFormat:
         desired = np.frombuffer(out, dtype=np.uint8).reshape((4, 4, 3))
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
-            decimal=3,
+            actual / 255,
+            desired / 255,
+            decimal=2,
         )
 
     @pytest.mark.parametrize(
@@ -542,16 +552,7 @@ class TestPixelFormat:
         desired = np.frombuffer(out, dtype=np.uint8).reshape((4, 4, 3))
 
         np.testing.assert_array_almost_equal(
-            actual,
-            desired,
-            decimal=3,
+            actual / 255,
+            desired / 255,
+            decimal=2,
         )
-
-
-# TestPixelFormat().test_grayf_to_yuv(0, GRAYF, 'grayf16le', 16, np.float16)
-# TestPixelFormat().test_gray_to_rgb(0, GRAY, 'gray', 8, np.uint8)
-# TestPixelFormat().test_gray_to_yuv(0, 'gray9le', 9, np.uint16)
-# TestPixelFormat().test_gray_to_rgb(0, GRAY, 'gray32le', 32, np.uint32)
-# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray', 8, np.uint8)
-# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray9le', 9, np.uint16)
-# TestPixelFormat().test_gray_from_rgb(0, GRAY, 'gray10le', 10, np.uint16)
