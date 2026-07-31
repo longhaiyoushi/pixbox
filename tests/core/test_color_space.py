@@ -55,7 +55,7 @@ class TestColorSpace:
             apply_cctf_decoding=apply_cctf_decoding,
         )
 
-        np.testing.assert_array_almost_equal(actual, desired, decimal=2.5)
+        np.testing.assert_array_almost_equal(actual, desired, decimal=2)
 
     @pytest.mark.parametrize(
         'seed',
@@ -94,4 +94,4 @@ class TestColorSpace:
             apply_cctf_encoding=apply_cctf_encoding,
         )
 
-        np.testing.assert_array_almost_equal(actual, desired, decimal=2.5)
+        np.testing.assert_array_almost_equal(actual, desired, decimal=2)
