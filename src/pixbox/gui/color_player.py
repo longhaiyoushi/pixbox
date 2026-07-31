@@ -49,6 +49,8 @@ from pixbox.core.color_transfer import (
 )
 from pixbox.core.pixel_format import (
     BGR24,
+    GRAY,
+    GRAYF,
     RGB24,
     RGBF32,
     YUV420_I420,
@@ -68,9 +70,8 @@ from pixbox.core.pixel_format import (
 )
 
 PIXEL_FORMATS: dict[str, type[PixelFormat]] = {
-    'RGB24': RGB24,
-    'BGR24': BGR24,
-    'RGBF32': RGBF32,
+    'GRAY': GRAY,
+    'GRAYF': GRAYF,
     'YUV420_I420': YUV420_I420,
     'YUV420_YV12': YUV420_YV12,
     'YUV420_NV12': YUV420_NV12,
@@ -83,6 +84,9 @@ PIXEL_FORMATS: dict[str, type[PixelFormat]] = {
     'YUV444_YV24': YUV444_YV24,
     'YUV444_NV24': YUV444_NV24,
     'YUV444_NV42': YUV444_NV42,
+    'RGB24': RGB24,
+    'BGR24': BGR24,
+    'RGBF32': RGBF32,
 }
 
 PRIMARY_OPTIONS: dict[str, ColorPrimaries] = {
@@ -156,20 +160,20 @@ class SettingsDialog(QDialog):
         data_format = data_format if data_format else {}
 
         self.primary_combo = QComboBox()
-        self.primary_combo.addItems(sorted(PRIMARY_OPTIONS))
+        self.primary_combo.addItems(list(PRIMARY_OPTIONS))
         self.primary_combo.setCurrentText(data_format.get('primary', 'sRGB'))
 
         self.transfer_combo = QComboBox()
-        self.transfer_combo.addItems(sorted(TRANSFER_OPTIONS))
+        self.transfer_combo.addItems(list(TRANSFER_OPTIONS))
         self.transfer_combo.setCurrentText(data_format.get('transfer', 'sRGB'))
 
         self.range_combo = QComboBox()
-        self.range_combo.addItems(sorted(RANGE_OPTIONS))
+        self.range_combo.addItems(list(RANGE_OPTIONS))
         self.range_combo.setCurrentText(data_format.get('range', 'Full Range'))
 
         self.format_combo = QComboBox()
-        self.format_combo.addItems(sorted(PIXEL_FORMATS))
-        self.format_combo.setCurrentText(data_format.get('format', 'RGB24'))
+        self.format_combo.addItems(list(PIXEL_FORMATS))
+        self.format_combo.setCurrentText(data_format.get('format', 'GRAY'))
 
         self.height_spin = QSpinBox()
         self.height_spin.setRange(1, 10000)

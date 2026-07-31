@@ -49,7 +49,7 @@ class YUVFormat(PixelFormat):
         return size
 
     @property
-    def dtype(self) -> type[np.uint8 | np.uint16]:
+    def dtype(self) -> type[np.uint8 | np.uint16 | np.float16 | np.float32]:
         if self.bits <= 8:
             return np.uint8
         elif self.bits <= 16:
@@ -71,6 +71,88 @@ class YUVFormat(PixelFormat):
         raise NotImplementedError(
             'from_yuv not implemented for this pixel format.'
         )
+
+
+@dataclass
+class GRAY(YUVFormat):
+    def __post_init__(self) -> None:
+        self.stride = max(self.stride, int(self.width * self.item_size))
+
+    @property
+    def bits_per_pixel(self) -> int:
+        return int(self.item_size * 8)
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, : self.stride]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        u = v = np.full_like(y, 1 << (self.bits - 1))
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        y8 = y.view(np.uint8).reshape((self.height, -1))
+        y8 = np.pad(
+            y8, ((0, self.stride - y8.shape[1]), (0, 0)), constant_values=0
+        )
+        value8 = y8.ravel()
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
+
+
+@dataclass
+class GRAYF(YUVFormat):
+    def __post_init__(self) -> None:
+        self.stride = max(self.stride, int(self.width * self.item_size))
+
+    @property
+    def dtype(self) -> type[np.float16 | np.float32]:
+        if self.bits == 16:
+            return np.float16
+        elif self.bits == 32:
+            return np.float32
+        raise ValueError(f'Unsupported bit depth: {self.bits}.')
+
+    @property
+    def bits_per_pixel(self) -> int:
+        return int(self.item_size * 8)
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.height * self.stride
+
+    def data2key(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+        return np.astype(self.to_yuv(value), np.float32)
+
+    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
+        return np.astype(self.from_yuv(value), self.dtype)
+
+    def to_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value8 = value.view(np.uint8).reshape((self.height, self.stride))
+        y8 = value8[: self.height, : self.stride]
+        y = y8.view(self.dtype).reshape((self.height, -1))
+        y = y[: self.height, : self.width]
+        u = v = np.full_like(y, 128 / 255)
+        value = np.dstack((y, u, v))
+        return value
+
+    def from_yuv(self, value: NDArray[Any]) -> NDArray[Any]:
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
+        y, u, v = np.dsplit(value, 3)
+        y8 = y.view(np.uint8).reshape((self.height, -1))
+        y8 = np.pad(
+            y8, ((0, self.stride - y8.shape[1]), (0, 0)), constant_values=0
+        )
+        value8 = y8.ravel()
+        value = value8.view(self.dtype).reshape((self.height, -1))
+        return value
 
 
 @dataclass
