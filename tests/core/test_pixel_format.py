@@ -12,6 +12,7 @@ from pixbox.core.pixel_format import (
     YUV422,
     YUV422_I422,
     YUV422_NV16,
+    YUV444,
     YUV444_I444,
     YUV444_NV24,
     YUV444_NV42,
@@ -52,6 +53,8 @@ class TestPixelFormat:
         value = rng.integers(256, size=(6, 4), dtype=dtype) << (bits - 8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+        assert len(value.tobytes()) == pixel_format.bytes_per_frame
+
         actual = pixel_format.to_yuv(value)
 
         out, _ = (
@@ -75,7 +78,7 @@ class TestPixelFormat:
 
     @pytest.mark.parametrize(
         'seed',
-        range(5)[:1],
+        range(5),
     )
     @pytest.mark.parametrize(
         ('pixel_format_cls', 'to_format', 'bits', 'dtype'),
@@ -105,6 +108,7 @@ class TestPixelFormat:
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
 
         out, _ = (
@@ -114,6 +118,7 @@ class TestPixelFormat:
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
         )
+        assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=dtype).reshape((6, 4))
 
@@ -155,6 +160,8 @@ class TestPixelFormat:
         value = rng.integers(256, size=(8, 4), dtype=dtype) << (bits - 8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+        assert len(value.tobytes()) == pixel_format.bytes_per_frame
+
         actual = pixel_format.to_yuv(value)
 
         out, _ = (
@@ -199,7 +206,7 @@ class TestPixelFormat:
     def test_yuv422_from_yuv(
         self,
         seed: int,
-        pixel_format_cls: type[YUV420],
+        pixel_format_cls: type[YUV422],
         to_format: str,
         bits: int,
         dtype: type[np.uint8 | np.uint16],
@@ -208,6 +215,7 @@ class TestPixelFormat:
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
 
         out, _ = (
@@ -217,6 +225,7 @@ class TestPixelFormat:
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
         )
+        assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=dtype).reshape((8, 4))
 
@@ -249,7 +258,7 @@ class TestPixelFormat:
     def test_yuv444_to_yuv(
         self,
         seed: int,
-        pixel_format_cls: type[YUV422],
+        pixel_format_cls: type[YUV444],
         from_format: str,
         bits: int,
         dtype: type[np.uint8 | np.uint16],
@@ -258,6 +267,8 @@ class TestPixelFormat:
         value = rng.integers(256, size=(12, 4), dtype=dtype) << (bits - 8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+        assert len(value.tobytes()) == pixel_format.bytes_per_frame
+
         actual = pixel_format.to_yuv(value)
 
         out, _ = (
@@ -302,7 +313,7 @@ class TestPixelFormat:
     def test_yuv444_from_yuv(
         self,
         seed: int,
-        pixel_format_cls: type[YUV420],
+        pixel_format_cls: type[YUV444],
         to_format: str,
         bits: int,
         dtype: type[np.uint8 | np.uint16],
@@ -311,6 +322,7 @@ class TestPixelFormat:
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
 
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
+
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
         actual = actual.reshape((12, 4))
 
@@ -321,6 +333,7 @@ class TestPixelFormat:
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
         )
+        assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=dtype).reshape((12, 4))
 
@@ -351,6 +364,8 @@ class TestPixelFormat:
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
 
         pixel_format = pixel_format_cls(height=4, width=4)
+        assert len(value.tobytes()) == pixel_format.bytes_per_frame
+
         actual = pixel_format.to_rgb(value)
 
         out, _ = (
@@ -388,6 +403,7 @@ class TestPixelFormat:
         value = rng.integers(256, size=(4, 4, 3), dtype=np.uint8)
 
         pixel_format = pixel_format_cls(height=4, width=4)
+
         actual = pixel_format.from_rgb(value)
 
         out, _ = (
@@ -395,6 +411,7 @@ class TestPixelFormat:
             .output('pipe:', f='rawvideo', pix_fmt=to_format, vframes=1)
             .run(input=value.tobytes(), capture_stdout=True)
         )
+        assert len(out) == pixel_format.bytes_per_frame
 
         desired = np.frombuffer(out, dtype=np.uint8).reshape((4, 4, 3))
 

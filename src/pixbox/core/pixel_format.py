@@ -39,14 +39,14 @@ class PixelFormat:
 @dataclass
 class YUVFormat(PixelFormat):
     bits: int = 8
-    packed: bool = False
+    expanded: bool = True
 
     @property
     def item_size(self) -> float:
-        if self.packed:
-            return self.bits / 8
-        else:
-            return math.ceil(self.bits / 8)
+        size = self.bits / 8
+        if self.expanded:
+            size = math.ceil(size)
+        return size
 
     @property
     def dtype(self) -> type[np.uint8 | np.uint16]:
@@ -779,7 +779,7 @@ class RGB24(RGBFormat):
 
     @property
     def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 3
+        return self.height * self.stride
 
     def data2key(self, value: NDArray[np.uint8]) -> NDArray[np.float32]:
         return np.astype(self.to_rgb(value) / 255.0, np.float32)
@@ -813,7 +813,7 @@ class BGR24(RGBFormat):
 
     @property
     def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 3
+        return self.height * self.stride
 
     def data2key(self, value: NDArray[np.uint8]) -> NDArray[np.float32]:
         return np.astype(self.to_rgb(value) / 255.0, np.float32)
@@ -847,7 +847,7 @@ class RGBF32(RGBFormat):
 
     @property
     def bytes_per_frame(self) -> int:
-        return self.height * self.stride * 12
+        return self.height * self.stride
 
     def data2key(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
         return self.to_rgb(value)
