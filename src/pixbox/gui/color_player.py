@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QDropEvent,
     QIcon,
     QImage,
+    QIntValidator,
     QKeyEvent,
     QPixmap,
     QResizeEvent,
@@ -22,9 +23,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
-    QFrame,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QSizePolicy,
@@ -168,6 +171,11 @@ class SettingsDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setWindowTitle('Video Settings')
+        self.resize(480, 360)
+        self.setMinimumSize(440, 320)
+        self.setMaximumSize(520, 420)
+        self.setModal(True)
 
         data_format = data_format if data_format else {}
 
@@ -187,45 +195,66 @@ class SettingsDialog(QDialog):
         self.format_combo.addItems(list(PIXEL_FORMATS))
         self.format_combo.setCurrentText(data_format.get('format', 'GRAY'))
 
-        self.height_spin = QSpinBox()
-        self.height_spin.setRange(1, 10000)
-        self.height_spin.setValue(data_format.get('height', 720))
+        self.height_input = QLineEdit(str(data_format.get('height', 720)))
+        self.height_input.setPlaceholderText('Height')
+        self.height_input.setValidator(QIntValidator(1, 10000))
 
-        self.width_spin = QSpinBox()
-        self.width_spin.setRange(1, 10000)
-        self.width_spin.setValue(data_format.get('width', 1280))
+        self.width_input = QLineEdit(str(data_format.get('width', 1280)))
+        self.width_input.setPlaceholderText('Width')
+        self.width_input.setValidator(QIntValidator(1, 10000))
 
-        self.stride_spin = QSpinBox()
-        self.stride_spin.setRange(0, 10000)
-        self.stride_spin.setValue(data_format.get('stride', 0))
+        self.stride_input = QLineEdit(str(data_format.get('stride', 0)))
+        self.stride_input.setPlaceholderText('Stride')
+        self.stride_input.setValidator(QIntValidator(0, 10000))
 
-        self.bits_spin = QSpinBox()
-        self.bits_spin.setRange(8, 16)
-        self.bits_spin.setValue(data_format.get('bits', 8))
+        self.bits_combo = QComboBox()
+        self.bits_combo.addItems(['8', '10', '12', '14', '16', '32'])
+        self.bits_combo.setCurrentText(str(data_format.get('bits', 8)))
 
-        self.expanded_check_box = QCheckBox('Expanded Mode')
+        self.expanded_check_box = QCheckBox()
         self.expanded_check_box.setChecked(data_format.get('expanded', True))
 
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 120)
         self.fps_spin.setValue(fps)
 
-        form = QFormLayout()
-        form.addRow('Color Primary:', self.primary_combo)
-        form.addRow('Color Transfer:', self.transfer_combo)
-        form.addRow('Color Range:', self.range_combo)
-        form.addRow('Pixel Format:', self.format_combo)
-        form.addRow('Height:', self.height_spin)
-        form.addRow('Width:', self.width_spin)
-        form.addRow('Stride:', self.stride_spin)
-        form.addRow('Bits:', self.bits_spin)
-        form.addRow('expanded:', self.expanded_check_box)
+        header = QLabel('Configure how raw video files are interpreted.')
+        header.setWordWrap(True)
+        header.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        header.setStyleSheet('font-size: 10pt;')
 
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        form.addRow(line)
+        color_group = QGroupBox('Color pipeline')
+        color_layout = QFormLayout(color_group)
+        color_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        color_layout.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
+        color_layout.addRow('Color Primary:', self.primary_combo)
+        color_layout.addRow('Color Transfer:', self.transfer_combo)
+        color_layout.addRow('Color Range:', self.range_combo)
 
-        form.addRow('FPS:', self.fps_spin)
+        pixel_group = QGroupBox('Pixel layout')
+        pixel_layout = QGridLayout(pixel_group)
+        pixel_layout.setContentsMargins(12, 12, 12, 12)
+        pixel_layout.setSpacing(8)
+        pixel_layout.setColumnStretch(1, 1)
+        pixel_layout.setColumnStretch(3, 1)
+        pixel_layout.addWidget(QLabel('Pixel Format:'), 0, 0)
+        pixel_layout.addWidget(self.format_combo, 0, 1, 1, 3)
+        pixel_layout.addWidget(QLabel('Height:'), 1, 0)
+        pixel_layout.addWidget(self.height_input, 1, 1)
+        pixel_layout.addWidget(QLabel('Width:'), 1, 2)
+        pixel_layout.addWidget(self.width_input, 1, 3)
+        pixel_layout.addWidget(QLabel('Stride:'), 2, 0)
+        pixel_layout.addWidget(self.stride_input, 2, 1)
+        pixel_layout.addWidget(QLabel('Bits:'), 2, 2)
+        pixel_layout.addWidget(self.bits_combo, 2, 3)
+        pixel_layout.addWidget(QLabel('Expanded Mode:'), 3, 0)
+        pixel_layout.addWidget(self.expanded_check_box, 3, 1)
+
+        playback_group = QGroupBox('Playback')
+        playback_layout = QFormLayout(playback_group)
+        playback_layout.addRow('FPS:', self.fps_spin)
 
         buttons = QHBoxLayout()
         ok_button = QPushButton('Ok')
@@ -237,7 +266,12 @@ class SettingsDialog(QDialog):
         buttons.addWidget(cancel_button)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+        layout.addWidget(header)
+        layout.addWidget(color_group)
+        layout.addWidget(pixel_group)
+        layout.addWidget(playback_group)
         layout.addLayout(buttons)
 
     def data_format(self) -> dict[str, Any]:
@@ -246,10 +280,10 @@ class SettingsDialog(QDialog):
             'transfer': self.transfer_combo.currentText(),
             'range': self.range_combo.currentText(),
             'format': self.format_combo.currentText(),
-            'height': self.height_spin.value(),
-            'width': self.width_spin.value(),
-            'stride': self.stride_spin.value(),
-            'bits': self.bits_spin.value(),
+            'height': int(self.height_input.text() or 0),
+            'width': int(self.width_input.text() or 0),
+            'stride': int(self.stride_input.text() or 0),
+            'bits': int(self.bits_combo.currentText() or 8),
             'expanded': self.expanded_check_box.isChecked(),
         }
 
