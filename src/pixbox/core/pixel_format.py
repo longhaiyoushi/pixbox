@@ -56,6 +56,11 @@ class ChromaOrder(Enum):
     VU = 'vu'
 
 
+class PackedOrder(Enum):
+    YUV = 'yuv'
+    UVY = 'uvy'
+
+
 @dataclass
 class YUVFormat(PixelFormat):
     is_integer: ClassVar[bool]
@@ -245,6 +250,11 @@ class GRAYF(Y):
 class YUV420(YUVFormat):
     is_integer: ClassVar[bool] = True
 
+    def __post_init__(self) -> None:
+        if self.height % 2 != 0 or self.width % 2 != 0:
+            raise ValueError('YUV420 formats require even height and width.')
+        super().__post_init__()
+
     @functools.cached_property
     def bits_per_pixel(self) -> int:
         return int(self.item_size * 12)
@@ -380,6 +390,11 @@ class YUV420_NV21(YUV420SemiPlanar):
 class YUV422(YUVFormat):
     is_integer: ClassVar[bool] = True
 
+    def __post_init__(self) -> None:
+        if self.height % 2 != 0 or self.width % 2 != 0:
+            raise ValueError('YUV422 formats require even height and width.')
+        super().__post_init__()
+
     @functools.cached_property
     def bits_per_pixel(self) -> int:
         return int(self.item_size * 16)
@@ -502,7 +517,7 @@ class YUV422_NV61(YUV422SemiPlanar):
 
 @dataclass
 class YUV422Packed(YUV422):
-    is_y_first: ClassVar[bool]
+    packed_order: ClassVar[PackedOrder]
 
     @functools.cached_property
     def pitch(self) -> int:
@@ -517,7 +532,7 @@ class YUV422Packed(YUV422):
         value8 = value8[: self.height, : self.pitch]
         value = self.unpack(value8)
         value = value.view(self.dtype).reshape((self.height, self.width, 2))
-        if self.is_y_first:
+        if self.packed_order == PackedOrder.YUV:
             y, uv = np.split(value, [1], axis=-1)
         else:
             uv, y = np.split(value, [1], axis=-1)
@@ -538,7 +553,7 @@ class YUV422Packed(YUV422):
         uv = (
             uv.reshape((self.height, self.width // 2, 2, 2)).mean(axis=2) + 0.5
         ).astype(self.dtype)
-        if self.is_y_first:
+        if self.packed_order == PackedOrder.YUV:
             value = np.stack((y, uv), axis=-1)
         else:
             value = np.stack((uv, y), axis=-1)
@@ -553,28 +568,28 @@ class YUV422Packed(YUV422):
 class YUV422_YUYV(YUV422Packed):
     name: ClassVar[str] = 'YUV422_YUYV'
     chroma_order: ClassVar[ChromaOrder] = ChromaOrder.UV
-    is_y_first: ClassVar[bool] = True
+    packed_order: ClassVar[PackedOrder] = PackedOrder.YUV
 
 
 @dataclass
 class YUV422_YVYU(YUV422Packed):
     name: ClassVar[str] = 'YUV422_YVYU'
     chroma_order: ClassVar[ChromaOrder] = ChromaOrder.VU
-    is_y_first: ClassVar[bool] = True
+    packed_order: ClassVar[PackedOrder] = PackedOrder.YUV
 
 
 @dataclass
 class YUV422_UYVY(YUV422Packed):
     name: ClassVar[str] = 'YUV422_UYVY'
     chroma_order: ClassVar[ChromaOrder] = ChromaOrder.UV
-    is_y_first: ClassVar[bool] = False
+    packed_order: ClassVar[PackedOrder] = PackedOrder.UVY
 
 
 @dataclass
 class YUV422_VYUY(YUV422Packed):
     name: ClassVar[str] = 'YUV422_VYUY'
     chroma_order: ClassVar[ChromaOrder] = ChromaOrder.VU
-    is_y_first: ClassVar[bool] = False
+    packed_order: ClassVar[PackedOrder] = PackedOrder.UVY
 
 
 @dataclass
