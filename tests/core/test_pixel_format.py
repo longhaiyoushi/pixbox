@@ -31,6 +31,48 @@ class TestPixelFormat:
         range(5),
     )
     @pytest.mark.parametrize(
+        'bits',
+        [10, 12],
+    )
+    def test_pack_unpack_roundtrip(
+        self,
+        seed: int,
+        bits: int,
+    ) -> None:
+        rng = np.random.default_rng(seed=seed)
+        actual = rng.integers(65536, size=16, dtype=np.uint16)
+
+        pixel_format = GRAY(height=4, width=4, bits=bits)
+        desired = pixel_format.unpack(pixel_format.pack(actual))
+
+        np.testing.assert_array_equal(actual, desired)
+
+    @pytest.mark.parametrize(
+        'seed',
+        range(5),
+    )
+    @pytest.mark.parametrize(
+        'bits',
+        [10, 12],
+    )
+    def test_unpack_pack_roundtrip(
+        self,
+        seed: int,
+        bits: int,
+    ) -> None:
+        rng = np.random.default_rng(seed=seed)
+        actual = rng.integers(256, size=16, dtype=np.uint8)
+
+        pixel_format = GRAY(height=4, width=4, bits=bits)
+        desired = pixel_format.pack(pixel_format.unpack(actual))
+
+        np.testing.assert_array_equal(actual, desired)
+
+    @pytest.mark.parametrize(
+        'seed',
+        range(5),
+    )
+    @pytest.mark.parametrize(
         ('pixel_format_cls', 'from_format', 'bits', 'dtype'),
         [
             (GRAY, 'gray', 8, np.uint8),
@@ -55,8 +97,8 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
-        actual = pixel_format.to_yuv(value)
-        actual = actual
+        actual = pixel_format.to_yuv(value)  # type: ignore[arg-type]
+        actual = actual.view(dtype).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input(
@@ -70,7 +112,7 @@ class TestPixelFormat:
                 'pipe:',
                 f='rawvideo',
                 pix_fmt='yuv444p',
-                vframes=1,
+                s='4x4',
                 color_range='pc',
             )
             .run(input=value.tobytes(), capture_stdout=True)
@@ -117,6 +159,7 @@ class TestPixelFormat:
         pixel_format = GRAY(height=4, width=4, bits=bits)
 
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
+        actual = actual.view(dtype).reshape((4, 4))  # type: ignore[assignment]
 
         out, _ = (
             ffmpeg.input(
@@ -130,7 +173,7 @@ class TestPixelFormat:
                 'pipe:',
                 f='rawvideo',
                 pix_fmt=to_format,
-                vframes=1,
+                s='4x4',
                 color_range='pc',
             )
             .run(
@@ -181,11 +224,12 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
-        actual = pixel_format.to_yuv(value)
+        actual = pixel_format.to_yuv(value)  # type: ignore[arg-type]
+        actual = actual.view(dtype).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt=from_format, s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
             .run(input=value.tobytes(), capture_stdout=True)
         )
 
@@ -236,10 +280,11 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
 
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
+        actual = actual.view(dtype).reshape((6, 4))  # type: ignore[assignment]
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt=to_format, vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt=to_format, s='4x4')
             .run(
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
@@ -273,6 +318,9 @@ class TestPixelFormat:
             (YUV422_NV16, 'p212le', 16, np.uint16),
             (YUV422_NV16, 'p216le', 16, np.uint16),
             (YUV422_YUYV, 'yuyv422', 8, np.uint8),
+            (YUV422_YUYV, 'y210le', 16, np.uint16),
+            (YUV422_YUYV, 'y212le', 16, np.uint16),
+            (YUV422_YUYV, 'y216le', 16, np.uint16),
             (YUV422_YVYU, 'yvyu422', 8, np.uint8),
             (YUV422_UYVY, 'uyvy422', 8, np.uint8),
         ],
@@ -293,11 +341,12 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
-        actual = pixel_format.to_yuv(value)
+        actual = pixel_format.to_yuv(value)  # type: ignore[arg-type]
+        actual = actual.view(dtype).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt=from_format, s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
             .run(input=value.tobytes(), capture_stdout=True)
         )
 
@@ -333,6 +382,9 @@ class TestPixelFormat:
             (YUV422_NV16, 'p212le', 16, np.uint16),
             (YUV422_NV16, 'p216le', 16, np.uint16),
             (YUV422_YUYV, 'yuyv422', 8, np.uint8),
+            (YUV422_YUYV, 'y210le', 16, np.uint16),
+            (YUV422_YUYV, 'y212le', 16, np.uint16),
+            (YUV422_YUYV, 'y216le', 16, np.uint16),
             (YUV422_YVYU, 'yvyu422', 8, np.uint8),
             (YUV422_UYVY, 'uyvy422', 8, np.uint8),
         ],
@@ -351,10 +403,13 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
 
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
+        actual = actual.view(dtype).reshape((8, 4))  # type: ignore[assignment]
+        if issubclass(pixel_format_cls, YUV422Packed):
+            actual = actual.reshape((4, 8))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt=to_format, vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt=to_format, s='4x4')
             .run(
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
@@ -405,11 +460,12 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
-        actual = pixel_format.to_yuv(value)
+        actual = pixel_format.to_yuv(value)  # type: ignore[arg-type]
+        actual = actual.view(dtype).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt=from_format, s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
             .run(input=value.tobytes(), capture_stdout=True)
         )
 
@@ -460,18 +516,18 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4, bits=bits)
 
         actual = pixel_format.from_yuv(value.astype(dtype) << (bits - 8))  # type: ignore[operator]
-        actual = actual.reshape((12, 4))
+        actual = actual.view(dtype).reshape(48)  # type: ignore[assignment]
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt='yuv444p', s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt=to_format, vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt=to_format, s='4x4')
             .run(
                 input=value.transpose((2, 0, 1)).tobytes(), capture_stdout=True
             )
         )
         assert len(out) == pixel_format.bytes_per_frame
 
-        desired = np.frombuffer(out, dtype=dtype).reshape((12, 4))
+        desired = np.frombuffer(out, dtype=dtype).reshape(48)
 
         np.testing.assert_array_almost_equal(
             actual / (2**bits - 1),
@@ -503,10 +559,11 @@ class TestPixelFormat:
         assert len(value.tobytes()) == pixel_format.bytes_per_frame
 
         actual = pixel_format.to_rgb(value)
+        actual = actual.view(np.uint8).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt=from_format, s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt='rgb24', vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt='rgb24', s='4x4')
             .run(input=value.tobytes(), capture_stdout=True)
         )
 
@@ -541,10 +598,11 @@ class TestPixelFormat:
         pixel_format = pixel_format_cls(height=4, width=4)
 
         actual = pixel_format.from_rgb(value)
+        actual = actual.view(np.uint8).reshape((4, 4, 3))
 
         out, _ = (
             ffmpeg.input('pipe:', f='rawvideo', pix_fmt='rgb24', s='4x4')
-            .output('pipe:', f='rawvideo', pix_fmt=to_format, vframes=1)
+            .output('pipe:', f='rawvideo', pix_fmt=to_format, s='4x4')
             .run(input=value.tobytes(), capture_stdout=True)
         )
         assert len(out) == pixel_format.bytes_per_frame
