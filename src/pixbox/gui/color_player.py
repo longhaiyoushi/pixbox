@@ -17,10 +17,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -125,6 +127,7 @@ def build_color_space(
     width: int,
     stride: int,
     bits: int,
+    expanded: bool = True,
 ) -> ColorSpace:
     if stride is None:
         stride = 0
@@ -135,6 +138,7 @@ def build_color_space(
     }
     if issubclass(PIXEL_FORMATS[pixel_format], YUVFormat):
         kwargs['bits'] = bits
+        kwargs['expanded'] = expanded
     return ColorSpace(
         pixel_format=PIXEL_FORMATS[pixel_format](**kwargs),
         color_range=RANGE_OPTIONS[color_range](bits=bits),
@@ -199,6 +203,9 @@ class SettingsDialog(QDialog):
         self.bits_spin.setRange(8, 16)
         self.bits_spin.setValue(data_format.get('bits', 8))
 
+        self.expanded_check_box = QCheckBox('Expanded Mode')
+        self.expanded_check_box.setChecked(data_format.get('expanded', True))
+
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 120)
         self.fps_spin.setValue(fps)
@@ -212,6 +219,12 @@ class SettingsDialog(QDialog):
         form.addRow('Width:', self.width_spin)
         form.addRow('Stride:', self.stride_spin)
         form.addRow('Bits:', self.bits_spin)
+        form.addRow('expanded:', self.expanded_check_box)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        form.addRow(line)
+
         form.addRow('FPS:', self.fps_spin)
 
         buttons = QHBoxLayout()
@@ -237,6 +250,7 @@ class SettingsDialog(QDialog):
             'width': self.width_spin.value(),
             'stride': self.stride_spin.value(),
             'bits': self.bits_spin.value(),
+            'expanded': self.expanded_check_box.isChecked(),
         }
 
     def fps(self) -> int:
@@ -250,7 +264,6 @@ class MainWindow(QMainWindow):
         self.resize(960, 720)
         self.setAcceptDrops(True)
 
-        self.loaded = False
         self.raw_bytes: np.memmap | None = None
         self.frame_buffers: list[np.ndarray[Any, Any]] = []
         self.current_frame = 0
@@ -418,7 +431,6 @@ class MainWindow(QMainWindow):
     def open_file(self, filename: str) -> None:
         if self.current_file != Path(filename):
             self.current_file = Path(filename)
-            self.loaded = False
         self.on_setup()
 
     def on_setup(self) -> None:
@@ -432,13 +444,12 @@ class MainWindow(QMainWindow):
         data_format = dialog.data_format()
         if self.current_format != data_format:
             self.current_format = data_format
-            self.loaded = False
+            self.apply_format(self.current_format)
 
-        self.apply_format(self.current_format, str(self.current_file))
-
-    def apply_format(self, data_format: dict[str, Any], filename: str) -> None:
-        if self.loaded:
+    def apply_format(self, data_format: dict[str, Any]) -> None:
+        if self.current_file is None:
             return
+
         color_space = build_color_space(
             color_primary=data_format['primary'],
             color_transfer=data_format['transfer'],
@@ -448,9 +459,10 @@ class MainWindow(QMainWindow):
             width=data_format['width'],
             stride=data_format['stride'],
             bits=data_format['bits'],
+            expanded=data_format['expanded'],
         )
 
-        self.raw_bytes = np.memmap(filename, dtype=np.uint8, mode='r')
+        self.raw_bytes = np.memmap(self.current_file, dtype=np.uint8, mode='r')
         self.frame_buffers = []
         self.current_frame = 0
         self.playing = False
@@ -475,7 +487,7 @@ class MainWindow(QMainWindow):
         self.slider.setEnabled(len(self.frame_buffers) > 1)
         self.display_current_frame()
         self.statusBar().showMessage(
-            f'{Path(filename).name} • {len(self.frame_buffers)} frame(s)'
+            f'{self.current_file.name} • {len(self.frame_buffers)} frame(s)'
         )
 
     def display_current_frame(self) -> None:
