@@ -44,6 +44,7 @@ indent-style = "space"
 
 [tool.mypy]
 strict = true
+mypy_path = ["src"]
 
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
