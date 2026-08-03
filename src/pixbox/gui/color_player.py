@@ -229,6 +229,12 @@ class SettingsDialog(QDialog):
         self.expanded_check_box = QCheckBox()
         self.expanded_check_box.setChecked(data_format.get('expanded', True))
 
+        self.endian_check_box = QCheckBox()
+        self.endian_check_box.setChecked(data_format.get('big_endian', False))
+
+        self.loop_check_box = QCheckBox()
+        self.loop_check_box.setChecked(data_format.get('loop', False))
+
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 120)
         self.fps_spin.setValue(fps)
@@ -252,6 +258,7 @@ class SettingsDialog(QDialog):
         pixel_layout = QGridLayout(pixel_group)
         pixel_layout.setContentsMargins(12, 12, 12, 12)
         pixel_layout.setSpacing(8)
+        pixel_layout.setColumnMinimumWidth(0, 100)
         pixel_layout.setColumnStretch(1, 1)
         pixel_layout.setColumnStretch(3, 1)
         pixel_layout.addWidget(QLabel('Pixel Format:'), 0, 0)
@@ -268,12 +275,22 @@ class SettingsDialog(QDialog):
         pixel_layout.addWidget(self.min_input, 3, 1)
         pixel_layout.addWidget(QLabel('Max:'), 3, 2)
         pixel_layout.addWidget(self.max_input, 3, 3)
-        pixel_layout.addWidget(QLabel('Expanded Mode:'), 4, 0)
+        pixel_layout.addWidget(QLabel('Expanded:'), 4, 0)
         pixel_layout.addWidget(self.expanded_check_box, 4, 1)
+        pixel_layout.addWidget(QLabel('Big endian:'), 4, 2)
+        pixel_layout.addWidget(self.endian_check_box, 4, 3)
 
         playback_group = QGroupBox('Playback')
-        playback_layout = QFormLayout(playback_group)
-        playback_layout.addRow('FPS:', self.fps_spin)
+        playback_layout = QGridLayout(playback_group)
+        playback_layout.setContentsMargins(12, 12, 12, 12)
+        playback_layout.setSpacing(8)
+        playback_layout.setColumnMinimumWidth(0, 100)
+        playback_layout.setColumnStretch(1, 1)
+        playback_layout.setColumnStretch(3, 1)
+        playback_layout.addWidget(QLabel('FPS:'), 0, 0)
+        playback_layout.addWidget(self.fps_spin, 0, 1)
+        playback_layout.addWidget(QLabel('Loop:'), 0, 2)
+        playback_layout.addWidget(self.loop_check_box, 0, 3)
 
         buttons = QHBoxLayout()
         ok_button = QPushButton('Ok')
@@ -306,6 +323,8 @@ class SettingsDialog(QDialog):
             'valid_min': float(self.min_input.text() or 0.0),
             'valid_max': float(self.max_input.text() or 0.0),
             'expanded': self.expanded_check_box.isChecked(),
+            'big_endian': self.endian_check_box.isChecked(),
+            'loop': self.loop_check_box.isChecked(),
         }
 
     def fps(self) -> int:
@@ -320,8 +339,13 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self.raw_bytes: np.memmap | None = None
-        self.frame_buffers: list[np.ndarray[Any, Any]] = []
+        self.color_space: ColorSpace | None = None
+        self.frame_size = 0
+        self.frame_count = 0
         self.current_frame = 0
+        self.current_frame_buffer: np.ndarray[Any, Any] | None = None
+        self.current_frame_index = -1
+        self.current_image: QImage | None = None
         self.playing = False
         self.current_file: Path | None = None
         self.current_format: dict[str, Any] | None = None
@@ -538,70 +562,93 @@ class MainWindow(QMainWindow):
         )
 
         self.raw_bytes = np.memmap(self.current_file, dtype=np.uint8, mode='r')
-        self.frame_buffers = []
+        self.color_space = color_space
+        self.frame_size = color_space.pixel_format.bytes_per_frame
+        self.frame_count = max(
+            1, math.ceil(self.raw_bytes.size / self.frame_size)
+        )
+        self.current_frame_buffer = None
+        self.current_frame_index = -1
+        self.current_image = None
         self.current_frame = 0
+        self.loop_enabled = self.current_format.get('loop', False)
         self.playing = False
         self.zoom_level = 1.0
         self.play_button.setText('▶️')
         self.timer.stop()
 
-        frame_size = color_space.pixel_format.bytes_per_frame
-        frame_count = max(1, math.ceil(self.raw_bytes.size / frame_size))
-        for index in range(frame_count):
-            start = index * frame_size
-            end = start + frame_size
-            frame = self.raw_bytes[start:end]
-            pad = frame_size - frame.size
-            if pad > 0:
-                frame = np.pad(frame, (0, pad))
-            rgb = decode_frame_to_rgb(frame, color_space)
-            self.frame_buffers.append(rgb)
-
-        self.slider.setMaximum(max(0, len(self.frame_buffers) - 1))
+        self.slider.setMaximum(max(0, self.frame_count - 1))
         self.slider.setValue(0)
-        self.slider.setEnabled(len(self.frame_buffers) > 1)
+        self.slider.setEnabled(self.frame_count > 1)
         self.display_current_frame()
         self.statusBar().showMessage(
-            f'{self.current_file.name} • {len(self.frame_buffers)} frame(s)'
+            f'{self.current_file.name} • {self.frame_count} frame(s)'
         )
 
     def display_current_frame(self) -> None:
-        if not self.frame_buffers:
+        if (
+            self.raw_bytes is None
+            or self.color_space is None
+            or self.frame_count <= 0
+            or self.frame_size <= 0
+        ):
             self.image_label.setText('No file loaded')
             self.frame_info_label.setText('Frame 0 / 0')
             self.slider.setValue(0)
             return
 
-        frame = self.frame_buffers[self.current_frame]
-        height, width = frame.shape[:2]
-        rgb8 = np.clip(frame * 255.0, 0, 255).astype(np.uint8)
-        self.image = QImage(
-            rgb8.tobytes(),
-            width,
-            height,
-            width * 3,
-            QImage.Format.Format_RGB888,
-        )
+        if self.current_frame_index != self.current_frame:
+            self.current_frame_buffer = self._load_frame(self.current_frame)
+            self.current_frame_index = self.current_frame
+            self.current_image = self._rgb_to_qimage(self.current_frame_buffer)
+
+        if self.current_image is None:
+            self.image_label.setText('No file loaded')
+            self.frame_info_label.setText('Frame 0 / 0')
+            self.slider.setValue(0)
+            return
+
         scaled_size = QSize(
-            max(1, int(width * self.zoom_level)),
-            max(1, int(height * self.zoom_level)),
+            max(1, int(self.current_image.width() * self.zoom_level)),
+            max(1, int(self.current_image.height() * self.zoom_level)),
         )
         self.image_label.setPixmap(
-            QPixmap.fromImage(self.image).scaled(
+            QPixmap.fromImage(self.current_image).scaled(
                 scaled_size,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
         self.frame_info_label.setText(
-            f'Frame {self.current_frame + 1} / {len(self.frame_buffers)}'
+            f'Frame {self.current_frame + 1} / {self.frame_count}'
         )
         self.slider.blockSignals(True)
         self.slider.setValue(self.current_frame)
         self.slider.blockSignals(False)
 
+    def _load_frame(self, index: int) -> np.ndarray[Any, Any]:
+        assert self.raw_bytes is not None and self.color_space is not None
+        start = index * self.frame_size
+        end = start + self.frame_size
+        frame = self.raw_bytes[start:end]
+        pad = self.frame_size - frame.size
+        if pad > 0:
+            frame = np.pad(frame, (0, pad))
+        return decode_frame_to_rgb(frame, self.color_space)
+
+    def _rgb_to_qimage(self, rgb: np.ndarray[Any, Any]) -> QImage:
+        height, width = rgb.shape[:2]
+        rgb8 = np.clip(rgb * 255.0, 0, 255).astype(np.uint8)
+        return QImage(
+            rgb8.tobytes(),
+            width,
+            height,
+            width * 3,
+            QImage.Format.Format_RGB888,
+        )
+
     def on_save(self) -> None:
-        if not self.frame_buffers:
+        if self.current_image is None:
             return
         filename, _ = QFileDialog.getSaveFileName(
             self,
@@ -612,13 +659,13 @@ class MainWindow(QMainWindow):
         if not filename:
             return
 
-        if not self.image.save(filename):
+        if not self.current_image.save(filename):
             self.statusBar().showMessage(f'Failed to save {filename}')
             return
         self.statusBar().showMessage(f'Saved {Path(filename).name}')
 
     def first_frame(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
@@ -626,7 +673,7 @@ class MainWindow(QMainWindow):
         self.display_current_frame()
 
     def previous_frame(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
@@ -634,34 +681,40 @@ class MainWindow(QMainWindow):
         self.display_current_frame()
 
     def next_frame(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = min(
-            len(self.frame_buffers) - 1, self.current_frame + 1
-        )
+        self.current_frame = min(self.frame_count - 1, self.current_frame + 1)
         self.display_current_frame()
 
     def last_frame(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = len(self.frame_buffers) - 1
+        self.current_frame = self.frame_count - 1
         self.display_current_frame()
 
     def advance_frame(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
-        if self.current_frame >= len(self.frame_buffers) - 1:
-            self.current_frame = 0
+        if self.current_frame >= self.frame_count - 1:
+            if self.loop_enabled:
+                self.current_frame = 0
+                self.display_current_frame()
+            else:
+                self.playing = False
+                self.play_button.setText('▶️')
+                self.play_action.setIconText('▶️')
+                self.play_action.setText('▶️ Play / Pause')
+                self.timer.stop()
         else:
             self.current_frame += 1
-        self.display_current_frame()
+            self.display_current_frame()
 
     def toggle_play(self) -> None:
-        if not self.frame_buffers:
+        if self.frame_count <= 0:
             return
         self.playing = not self.playing
         if self.playing:
@@ -739,7 +792,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
-        if self.frame_buffers:
+        if self.frame_count > 0:
             self.display_current_frame()
 
 
