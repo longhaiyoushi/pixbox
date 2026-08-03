@@ -14,6 +14,8 @@ class PixelFormat:
     height: int
     width: int
     stride: int = 0
+    min: float = 0.0
+    max: float = 0.0
 
     def __post_init__(self) -> None:
         self.stride = max(self.stride, self.pitch)
@@ -22,6 +24,12 @@ class PixelFormat:
     def pitch(self) -> int:
         raise NotImplementedError(
             'pitch not implemented for this pixel format.'
+        )
+
+    @property
+    def dtype(self) -> type[np.uint8 | np.uint16 | np.float16 | np.float32]:
+        raise NotImplementedError(
+            'dtype not implemented for this pixel format.'
         )
 
     @functools.cached_property
@@ -68,6 +76,12 @@ class YUVFormat(PixelFormat):
     bits: int = 8
     expanded: bool = True
 
+    def __post_init__(self) -> None:
+        if self.min == self.max:
+            self.min = 0 if self.is_integer else 0.0
+            self.max = (2**self.bits - 1) if self.is_integer else 1.0
+        super().__post_init__()
+
     @functools.cached_property
     def pitch(self) -> int:
         return int(self.width * self.item_size)
@@ -93,39 +107,22 @@ class YUVFormat(PixelFormat):
                 return np.float32
         raise ValueError(f'Unsupported bit depth: {self.bits}.')
 
-    @functools.cached_property
-    def fill_value(self) -> float:
-        if self.is_integer:
-            return 1 << (self.bits - 1)
-        else:
-            return 128.0 / 255.0
-
     def unpack10(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
-        value8 = value8.view(np.uint8).reshape((-1, 5))
-        value = np.empty((value8.shape[0], 4), self.dtype)
-        value[:, 0] = ((value8[:, 0] & 0xFF) >> 0) | (
-            (value8[:, 1] & 0x03) << 8
-        )
-        value[:, 1] = ((value8[:, 1] & 0xFC) >> 2) | (
-            (value8[:, 2] & 0x0F) << 6
-        )
-        value[:, 2] = ((value8[:, 2] & 0xF0) >> 4) | (
-            (value8[:, 3] & 0x3F) << 4
-        )
-        value[:, 3] = ((value8[:, 3] & 0xC0) >> 6) | (
-            (value8[:, 4] & 0xFF) << 2
-        )
+        value8 = value8.view(np.uint8)
+        tmp = value8.astype(self.dtype).reshape((-1, 5))
+        value = np.empty((tmp.shape[0], 4), self.dtype)
+        value[:, 0] = ((tmp[:, 0] & 0x00FF) >> 0) | ((tmp[:, 1] & 0x0003) << 8)  # type: ignore[operator]
+        value[:, 1] = ((tmp[:, 1] & 0x00FC) >> 2) | ((tmp[:, 2] & 0x000F) << 6)  # type: ignore[operator]
+        value[:, 2] = ((tmp[:, 2] & 0x00F0) >> 4) | ((tmp[:, 3] & 0x003F) << 4)  # type: ignore[operator]
+        value[:, 3] = ((tmp[:, 3] & 0x00C0) >> 6) | ((tmp[:, 4] & 0x00FF) << 2)  # type: ignore[operator]
         return value
 
     def unpack12(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
-        value8 = value8.view(np.uint8).reshape((-1, 3))
-        value = np.empty((value8.shape[0], 2), self.dtype)
-        value[:, 0] = ((value8[:, 0] & 0xFF) >> 0) | (
-            (value8[:, 1] & 0x0F) << 8
-        )
-        value[:, 1] = ((value8[:, 1] & 0xF0) >> 4) | (
-            (value8[:, 2] & 0xFF) << 4
-        )
+        value8 = value8.view(np.uint8)
+        tmp = value8.astype(self.dtype).reshape((-1, 3))
+        value = np.empty((tmp.shape[0], 2), self.dtype)
+        value[:, 0] = ((tmp[:, 0] & 0x00FF) >> 0) | ((tmp[:, 1] & 0x000F) << 8)  # type: ignore[operator]
+        value[:, 1] = ((tmp[:, 1] & 0x00F0) >> 4) | ((tmp[:, 2] & 0x00FF) << 4)  # type: ignore[operator]
         return value
 
     def unpack(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
@@ -142,29 +139,21 @@ class YUVFormat(PixelFormat):
         return value
 
     def pack10(self, value: NDArray[Any]) -> NDArray[np.uint8]:
-        value = value.view(self.dtype).reshape((-1, 4))
-        value8 = np.empty((value.shape[0], 5), np.uint8)
-        value8[:, 0] = (value[:, 0] & 0x03FC) >> 2  # type: ignore[operator]
-        value8[:, 1] = ((value[:, 0] & 0x0003) << 6) | (  # type: ignore[operator]
-            (value[:, 1] & 0x03F0) >> 4  # type: ignore[operator]
-        )
-        value8[:, 2] = ((value[:, 1] & 0x000F) << 4) | (  # type: ignore[operator]
-            (value[:, 2] & 0x03C0) >> 6  # type: ignore[operator]
-        )
-        value8[:, 3] = ((value[:, 2] & 0x003F) << 2) | (  # type: ignore[operator]
-            (value[:, 3] & 0x0300) >> 8  # type: ignore[operator]
-        )
-        value8[:, 4] = (value[:, 3] & 0x00FF) << 0  # type: ignore[operator]
+        tmp = value.view(self.dtype).reshape((-1, 4))
+        value8 = np.empty((tmp.shape[0], 5), np.uint8)
+        value8[:, 0] = (tmp[:, 0] & 0x03FC) >> 2  # type: ignore[operator]
+        value8[:, 1] = ((tmp[:, 0] & 0x0003) << 6) | ((tmp[:, 1] & 0x03F0) >> 4)  # type: ignore[operator]
+        value8[:, 2] = ((tmp[:, 1] & 0x000F) << 4) | ((tmp[:, 2] & 0x03C0) >> 6)  # type: ignore[operator]
+        value8[:, 3] = ((tmp[:, 2] & 0x003F) << 2) | ((tmp[:, 3] & 0x0300) >> 8)  # type: ignore[operator]
+        value8[:, 4] = (tmp[:, 3] & 0x00FF) << 0  # type: ignore[operator]
         return value8
 
     def pack12(self, value: NDArray[Any]) -> NDArray[np.uint8]:
-        value = value.view(self.dtype).reshape((-1, 2))
-        value8 = np.empty((value.shape[0], 3), np.uint8)
-        value8[:, 0] = (value[:, 0] & 0x0FF0) >> 4  # type: ignore[operator]
-        value8[:, 1] = ((value[:, 0] & 0x000F) << 4) | (  # type: ignore[operator]
-            (value[:, 1] & 0x0F00) >> 8  # type: ignore[operator]
-        )
-        value8[:, 2] = (value[:, 1] & 0x00FF) << 0  # type: ignore[operator]
+        tmp = value.view(self.dtype).reshape((-1, 2))
+        value8 = np.empty((tmp.shape[0], 3), np.uint8)
+        value8[:, 0] = (tmp[:, 0] & 0x0FF0) >> 4  # type: ignore[operator]
+        value8[:, 1] = ((tmp[:, 0] & 0x000F) << 4) | ((tmp[:, 1] & 0x0F00) >> 8)  # type: ignore[operator]
+        value8[:, 2] = (tmp[:, 1] & 0x00FF) << 0  # type: ignore[operator]
         return value8
 
     def pack(self, value: NDArray[Any]) -> NDArray[np.uint8]:
@@ -182,14 +171,12 @@ class YUVFormat(PixelFormat):
 
     def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
         value = self.to_yuv(value8)
-        if self.is_integer:
-            value = value / (2**self.bits - 1)
+        value = (value - self.min) / (self.max - self.min)
         value = np.astype(value, np.float32)
         return value
 
     def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
-        if self.is_integer:
-            value = value * (2**self.bits - 1)
+        value = value * (self.max - self.min) + self.min
         value = np.astype(value, self.dtype)
         value8 = self.from_yuv(value)
         return value8
@@ -214,6 +201,13 @@ class Y(YUVFormat):
     @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
+
+    @functools.cached_property
+    def fill_value(self) -> float:
+        if self.is_integer:
+            return 1 << (self.bits - 1)
+        else:
+            return 128.0 / 255.0
 
     def to_yuv(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
@@ -303,9 +297,7 @@ class YUV420Planar(YUV420):
         ).astype(self.dtype)
         uv8 = self.pack(np.ascontiguousarray(uv))
         uv8 = uv8.view(np.uint8).reshape((2, self.height // 2, self.pitch // 2))
-        uv8 = np.pad(
-            uv8, {2: (0, self.padding // 2)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {2: (0, self.padding // 2)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape(
             (self.height * 3 // 2, self.stride)
@@ -364,9 +356,7 @@ class YUV420SemiPlanar(YUV420):
         ).astype(self.dtype)
         uv8 = self.pack(uv)
         uv8 = uv8.view(np.uint8).reshape((self.height // 2, self.pitch))
-        uv8 = np.pad(
-            uv8, {1: (0, self.padding)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {1: (0, self.padding)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape(
             (self.height * 3 // 2, self.stride)
@@ -441,9 +431,7 @@ class YUV422Planar(YUV422):
         ).astype(self.dtype)
         uv8 = self.pack(np.ascontiguousarray(uv))
         uv8 = uv8.view(np.uint8).reshape((2, self.height, self.pitch // 2))
-        uv8 = np.pad(
-            uv8, {2: (0, self.padding // 2)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {2: (0, self.padding // 2)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape((self.height * 2, self.stride))
         return value8
@@ -495,9 +483,7 @@ class YUV422SemiPlanar(YUV422):
         ).astype(self.dtype)
         uv8 = self.pack(uv)
         uv8 = uv8.view(np.uint8).reshape((self.height, self.pitch))
-        uv8 = np.pad(
-            uv8, {1: (0, self.padding)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {1: (0, self.padding)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape((self.height * 2, self.stride))
         return value8
@@ -637,9 +623,7 @@ class YUV444Planar(YUV444):
         uv = uv.transpose((2, 0, 1)).reshape((2, self.height, self.width))
         uv8 = self.pack(np.ascontiguousarray(uv))
         uv8 = uv8.view(np.uint8).reshape((2, self.height, self.pitch))
-        uv8 = np.pad(
-            uv8, {2: (0, self.padding)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {2: (0, self.padding)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape((3, self.height, self.stride))
         return value8
@@ -687,9 +671,7 @@ class YUV444SemiPlanar(YUV444):
             uv = uv[..., ::-1]
         uv8 = self.pack(uv)
         uv8 = uv8.view(np.uint8).reshape((self.height, self.pitch * 2))
-        uv8 = np.pad(
-            uv8, {1: (0, self.padding * 2)}, constant_values=self.fill_value
-        )
+        uv8 = np.pad(uv8, {1: (0, self.padding * 2)}, constant_values=0)
         value8 = np.concatenate((y8.ravel(), uv8.ravel()), axis=-1)
         value8 = value8.view(np.uint8).reshape((3, self.height, self.stride))
         return value8
@@ -709,6 +691,18 @@ class YUV444_NV42(YUV444SemiPlanar):
 
 @dataclass
 class RGBFormat(PixelFormat):
+    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
+        value = self.to_rgb(value8)
+        value = (value - self.min) / (self.max - self.min)
+        value = np.astype(value, np.float32)
+        return value
+
+    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
+        value = value * (self.max - self.min) + self.min
+        value = np.astype(value, self.dtype)
+        value8 = self.from_rgb(value)
+        return value8
+
     def to_rgb(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         raise NotImplementedError(
             'to_rgb not implemented for this pixel format.'
@@ -724,6 +718,12 @@ class RGBFormat(PixelFormat):
 class RGB24(RGBFormat):
     name: ClassVar[str] = 'RGB24'
 
+    def __post_init__(self) -> None:
+        if self.min == self.max:
+            self.min = 0
+            self.max = 255
+        super().__post_init__()
+
     @functools.cached_property
     def pitch(self) -> int:
         return self.width * 3
@@ -733,23 +733,21 @@ class RGB24(RGBFormat):
         return 24
 
     @functools.cached_property
+    def dtype(self) -> type[np.uint8]:
+        return np.uint8
+
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
-
-    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
-        return np.astype(self.to_rgb(value8) / 255.0, np.float32)
-
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
-        return self.from_rgb(np.astype(value * 255.0, np.uint8))
 
     def to_rgb(self, value8: NDArray[np.uint8]) -> NDArray[np.uint8]:
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
         value8 = value8[: self.height, : self.pitch]
-        value = value8.view(np.uint8).reshape((self.height, self.width, 3))
+        value = value8.view(self.dtype).reshape((self.height, self.width, 3))
         return value
 
     def from_rgb(self, value: NDArray[np.uint8]) -> NDArray[np.uint8]:
-        value8 = value.view(np.uint8).reshape((self.height, self.pitch))
+        value8 = value.view(self.dtype).reshape((self.height, self.pitch))
         value8 = np.pad(value8, {0: (0, self.padding)}, constant_values=0)
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
         return value8
@@ -759,6 +757,12 @@ class RGB24(RGBFormat):
 class BGR24(RGBFormat):
     name: ClassVar[str] = 'BGR24'
 
+    def __post_init__(self) -> None:
+        if self.min == self.max:
+            self.min = 0
+            self.max = 255
+        super().__post_init__()
+
     @functools.cached_property
     def pitch(self) -> int:
         return self.width * 3
@@ -768,24 +772,22 @@ class BGR24(RGBFormat):
         return 24
 
     @functools.cached_property
+    def dtype(self) -> type[np.uint8]:
+        return np.uint8
+
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
-
-    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
-        return np.astype(self.to_rgb(value8) / 255.0, np.float32)
-
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
-        return self.from_rgb(np.astype(value * 255.0, np.uint8))
 
     def to_rgb(self, value8: NDArray[np.uint8]) -> NDArray[np.uint8]:
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
         value8 = value8[: self.height, : self.pitch]
-        value = value8.view(np.uint8).reshape((self.height, self.width, 3))
+        value = value8.view(self.dtype).reshape((self.height, self.width, 3))
         value = value[..., ::-1]
         return value
 
     def from_rgb(self, value: NDArray[np.uint8]) -> NDArray[np.uint8]:
-        value = value.view(np.uint8).reshape((self.height, self.width, 3))
+        value = value.view(self.dtype).reshape((self.height, self.width, 3))
         value = value[..., ::-1]
         value8 = value.view(np.uint8).reshape((self.height, self.pitch))
         value8 = np.pad(value8, {0: (0, self.padding)}, constant_values=0)
@@ -796,6 +798,12 @@ class BGR24(RGBFormat):
 class RGBF32(RGBFormat):
     name: ClassVar[str] = 'RGBF32'
 
+    def __post_init__(self) -> None:
+        if self.min == self.max:
+            self.min = 0.0
+            self.max = 1.0
+        super().__post_init__()
+
     @functools.cached_property
     def pitch(self) -> int:
         return self.width * 12
@@ -805,19 +813,17 @@ class RGBF32(RGBFormat):
         return 96
 
     @functools.cached_property
+    def dtype(self) -> type[np.float32]:
+        return np.float32
+
+    @functools.cached_property
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
-
-    def data2key(self, value8: NDArray[Any]) -> NDArray[np.float32]:
-        return self.to_rgb(value8)
-
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[Any]:
-        return self.from_rgb(value)
 
     def to_rgb(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
         value8 = value8[: self.height, : self.pitch]
-        value = value8.view(np.float32).reshape((self.height, self.width, 3))
+        value = value8.view(self.dtype).reshape((self.height, self.width, 3))
         return value
 
     def from_rgb(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
