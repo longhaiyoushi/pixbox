@@ -7,6 +7,7 @@ import numpy as np
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
+    QDoubleValidator,
     QDragEnterEvent,
     QDropEvent,
     QIcon,
@@ -131,6 +132,8 @@ def build_color_space(
     stride: int,
     bits: int,
     expanded: bool = True,
+    valid_min: float = 0.0,
+    valid_max: float = 0.0,
 ) -> ColorSpace:
     if stride is None:
         stride = 0
@@ -138,6 +141,8 @@ def build_color_space(
         'height': height,
         'width': width,
         'stride': stride,
+        'min': valid_min,
+        'max': valid_max,
     }
     if issubclass(PIXEL_FORMATS[pixel_format], YUVFormat):
         kwargs['bits'] = bits
@@ -207,9 +212,19 @@ class SettingsDialog(QDialog):
         self.stride_input.setPlaceholderText('Stride')
         self.stride_input.setValidator(QIntValidator(0, 10000))
 
-        self.bits_combo = QComboBox()
-        self.bits_combo.addItems(['8', '10', '12', '14', '16', '32'])
-        self.bits_combo.setCurrentText(str(data_format.get('bits', 8)))
+        self.bits_spin = QSpinBox()
+        self.bits_spin.setRange(8, 32)
+        self.bits_spin.setValue(data_format.get('bits', 8))
+
+        self.min_input = QLineEdit()
+        self.min_input.setPlaceholderText('Min')
+        self.min_input.setValidator(QDoubleValidator())
+        self.min_input.setText(str(data_format.get('valid_min', 0)))
+
+        self.max_input = QLineEdit()
+        self.max_input.setPlaceholderText('Max')
+        self.max_input.setValidator(QDoubleValidator())
+        self.max_input.setText(str(data_format.get('valid_max', 0)))
 
         self.expanded_check_box = QCheckBox()
         self.expanded_check_box.setChecked(data_format.get('expanded', True))
@@ -248,9 +263,13 @@ class SettingsDialog(QDialog):
         pixel_layout.addWidget(QLabel('Stride:'), 2, 0)
         pixel_layout.addWidget(self.stride_input, 2, 1)
         pixel_layout.addWidget(QLabel('Bits:'), 2, 2)
-        pixel_layout.addWidget(self.bits_combo, 2, 3)
-        pixel_layout.addWidget(QLabel('Expanded Mode:'), 3, 0)
-        pixel_layout.addWidget(self.expanded_check_box, 3, 1)
+        pixel_layout.addWidget(self.bits_spin, 2, 3)
+        pixel_layout.addWidget(QLabel('Min:'), 3, 0)
+        pixel_layout.addWidget(self.min_input, 3, 1)
+        pixel_layout.addWidget(QLabel('Max:'), 3, 2)
+        pixel_layout.addWidget(self.max_input, 3, 3)
+        pixel_layout.addWidget(QLabel('Expanded Mode:'), 4, 0)
+        pixel_layout.addWidget(self.expanded_check_box, 4, 1)
 
         playback_group = QGroupBox('Playback')
         playback_layout = QFormLayout(playback_group)
@@ -283,7 +302,9 @@ class SettingsDialog(QDialog):
             'height': int(self.height_input.text() or 0),
             'width': int(self.width_input.text() or 0),
             'stride': int(self.stride_input.text() or 0),
-            'bits': int(self.bits_combo.currentText() or 8),
+            'bits': self.bits_spin.value(),
+            'valid_min': float(self.min_input.text() or 0.0),
+            'valid_max': float(self.max_input.text() or 0.0),
             'expanded': self.expanded_check_box.isChecked(),
         }
 
@@ -470,11 +491,18 @@ class MainWindow(QMainWindow):
         self.fps = dialog.fps()
         self.update_timer_interval()
 
+        changed = False
+
         data_format = dialog.data_format()
-        self.current_format = data_format
+        if self.current_format != data_format:
+            self.current_format = data_format
+            changed = True
 
         if self.current_file != Path(filename):
             self.current_file = Path(filename)
+            changed = True
+
+        if changed:
             self.apply_format()
 
     def on_setup(self) -> None:
@@ -505,6 +533,8 @@ class MainWindow(QMainWindow):
             stride=self.current_format['stride'],
             bits=self.current_format['bits'],
             expanded=self.current_format['expanded'],
+            valid_min=self.current_format['valid_min'],
+            valid_max=self.current_format['valid_max'],
         )
 
         self.raw_bytes = np.memmap(self.current_file, dtype=np.uint8, mode='r')

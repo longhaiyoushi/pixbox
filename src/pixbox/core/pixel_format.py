@@ -77,9 +77,12 @@ class YUVFormat(PixelFormat):
     expanded: bool = True
 
     def __post_init__(self) -> None:
-        if self.min == self.max:
-            self.min = 0 if self.is_integer else 0.0
-            self.max = (2**self.bits - 1) if self.is_integer else 1.0
+        if self.is_integer:
+            self.min = 0
+            self.max = 2**self.bits - 1
+        elif self.min == self.max:
+            self.min = 0.0
+            self.max = 1.0
         super().__post_init__()
 
     @functools.cached_property
@@ -202,19 +205,12 @@ class Y(YUVFormat):
     def bytes_per_frame(self) -> int:
         return self.height * self.stride
 
-    @functools.cached_property
-    def fill_value(self) -> float:
-        if self.is_integer:
-            return 1 << (self.bits - 1)
-        else:
-            return 128.0 / 255.0
-
     def to_yuv(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         value8 = value8.view(np.uint8).reshape((self.height, self.stride))
         y8 = value8[: self.height, : self.pitch]
         y = self.unpack(y8)
         y = y.view(self.dtype).reshape((self.height, self.width))
-        u = v = np.full_like(y, self.fill_value)
+        u = v = np.full_like(y, (self.min + self.max) * 0.5)
         value = np.dstack((y, u, v))
         return value
 
@@ -719,9 +715,8 @@ class RGB24(RGBFormat):
     name: ClassVar[str] = 'RGB24'
 
     def __post_init__(self) -> None:
-        if self.min == self.max:
-            self.min = 0
-            self.max = 255
+        self.min = 0
+        self.max = 255
         super().__post_init__()
 
     @functools.cached_property
@@ -758,9 +753,8 @@ class BGR24(RGBFormat):
     name: ClassVar[str] = 'BGR24'
 
     def __post_init__(self) -> None:
-        if self.min == self.max:
-            self.min = 0
-            self.max = 255
+        self.min = 0
+        self.max = 255
         super().__post_init__()
 
     @functools.cached_property
