@@ -30,7 +30,7 @@ MANIFEST
 #   Usually these files are written by a python script from a template
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-# *.spec
+*.spec
 
 # Installer logs
 pip-log.txt
@@ -216,3 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# C++ Build artifacts
+cpp/core/build/
+cpp/core/*.exe
+cpp/core/*.dll
+cpp/core/*.lib
+cpp/core/*.a
+cpp/core/*.so
+cpp/core/CMakeCache.txt
+cpp/core/CMakeFiles/
+cpp/core/CTestTestfile.cmake
+cpp/core/Makefile
+cpp/core/cmake_install.cmake
+cpp/core/compile_commands.json
+cpp/core/install_manifest.txt
+cpp/core/libpixbox_core.a
+cpp/core/libpixbox_core.so
+cpp/core/libpixbox_core.dll.a

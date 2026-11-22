@@ -1,5 +1,4 @@
 import math
-import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,7 +9,6 @@ from PySide6.QtGui import (
     QDoubleValidator,
     QDragEnterEvent,
     QDropEvent,
-    QIcon,
     QImage,
     QIntValidator,
     QKeyEvent,
@@ -796,16 +794,9 @@ class MainWindow(QMainWindow):
             self.display_current_frame()
 
 
-def get_icon_path(filename: str) -> Path:
-    if hasattr(sys, '_MEIPASS'):
-        return Path(sys._MEIPASS) / 'resource' / filename
-    return Path(__file__).parent.parent.parent.parent / 'resource' / filename
-
-
 def main() -> None:
     app = QApplication.instance() or QApplication([])
     app = cast(QApplication, app)
-    app.setWindowIcon(QIcon(str(get_icon_path('pixbox.ico'))))
     window = MainWindow()
     window.show()
     app.exec()

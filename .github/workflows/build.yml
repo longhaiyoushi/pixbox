@@ -22,19 +22,24 @@ jobs:
         run: |
           uv sync --frozen
 
-      - name: Build with PyInstaller
-        env:
-          APP_VERSION: ${{ github.ref_name }}
-        run: |
-          uv run pyinstaller --clean pixbox.spec
+      - name: Build with Nuitka
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: src/pixbox/main.py
+          mode: onefile
+          enable-plugins: pyside6
+          windows-icon-from-ico: resource/pixbox.ico
+          windows-console-mode: disable
+          output-filename: pixbox-${{ github.ref_name }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: pixbox-release
-          path: dist/
+          path: pixbox-*.exe
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/*.exe
+          files: pixbox-*.exe

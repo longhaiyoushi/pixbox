@@ -14,7 +14,6 @@
 
 - noxfile.py：定义统一的开发构建与质量检查流程
 - .pre-commit-config.yaml：定义提交前和推送前要执行的钩子
-- pixbox.spec：PyInstaller 的打包配置，用于构建可执行文件
 
 ## 2. 开发环境准备
 
@@ -117,12 +116,10 @@ uv build
 
 ### 7.2 构建可执行文件
 
-仓库中已经提供了 PyInstaller 配置文件 [pixbox.spec](pixbox.spec)，适合用于生成桌面可执行文件。
-
-在开发环境中，如果 PyInstaller 可用，可以基于该 spec 文件进行打包，例如：
+在开发环境中基于 Nuitka 进行打包：
 
 ```bash
-pyinstaller pixbox.spec
+uv run nuitka --onefile src/pixbox --enable-plugin=pyside6 --windows-icon-from-ico=resource/pixbox.ico --windows-console-mode=disable
 ```
 
 打包产物通常会生成到 dist 目录下，便于做本地验证或发布使用。
