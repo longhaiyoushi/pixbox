@@ -27,7 +27,9 @@ class PixelFormat:
         )
 
     @property
-    def dtype(self) -> type[np.uint8 | np.uint16 | np.float16 | np.float32]:
+    def dtype(
+        self,
+    ) -> type[np.uint8 | np.uint16 | np.uint32 | np.float16 | np.float32]:
         raise NotImplementedError(
             'dtype not implemented for this pixel format.'
         )
@@ -113,12 +115,16 @@ class YUVFormat(PixelFormat):
         return size
 
     @functools.cached_property
-    def dtype(self) -> type[np.uint8 | np.uint16 | np.float16 | np.float32]:
+    def dtype(
+        self,
+    ) -> type[np.uint8 | np.uint16 | np.uint32 | np.float16 | np.float32]:
         if self.is_integer:
             if self.bits <= 8:
                 return np.uint8
             elif self.bits <= 16:
                 return np.uint16
+            elif self.bits <= 32:
+                return np.uint32
         else:
             if self.bits == 16:
                 return np.float16
