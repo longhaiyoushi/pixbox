@@ -23,16 +23,14 @@ jobs:
           uv sync --frozen
 
       - name: Build with Nuitka
+        shell: bash
         run: |
-          uv run nuitka src/pixbox ^
-            --onefile ^
-            --enable-plugin=pyside6 ^
-            --windows-icon-from-ico=resource/pixbox.ico ^
-            --windows-console-mode=disable ^
+          uv run nuitka src/pixbox \
+            --onefile \
+            --enable-plugin=pyside6 \
+            --windows-icon-from-ico=resource/pixbox.ico \
+            --windows-console-mode=disable \
             -o pixbox-${{ github.ref_name }}.exe
-
-
-
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
