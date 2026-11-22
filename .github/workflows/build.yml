@@ -30,6 +30,7 @@ jobs:
             --enable-plugin=pyside6 \
             --windows-icon-from-ico=resource/pixbox.ico \
             --windows-console-mode=disable \
+            --assume-yes-for-downloads \
             -o pixbox-${{ github.ref_name }}.exe
 
       - name: Upload artifacts
