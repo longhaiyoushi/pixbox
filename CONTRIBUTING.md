@@ -122,7 +122,7 @@ uv build
 uv run nuitka --onefile src/pixbox --enable-plugin=pyside6 --windows-icon-from-ico=resource/pixbox.ico --windows-console-mode=disable
 ```
 
-打包产物通常会生成到 dist 目录下，便于做本地验证或发布使用。
+打包产物通常会生成到当前目录下，便于做本地验证或发布使用。
 
 ## 8. 提交前 checklist
 
