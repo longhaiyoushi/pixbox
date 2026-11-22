@@ -3,15 +3,23 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
+    QColor,
+    QCursor,
     QDoubleValidator,
     QDragEnterEvent,
     QDropEvent,
+    QFont,
     QImage,
     QIntValidator,
     QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPalette,
+    QPen,
     QPixmap,
     QResizeEvent,
 )
@@ -74,6 +82,7 @@ from pixbox.core.pixel_format import (
     YUV444_NV42,
     YUV444_YV24,
     PixelFormat,
+    RGBFormat,
     YUVFormat,
 )
 
@@ -120,6 +129,32 @@ TRANSFER_OPTIONS: dict[str, ColorTransfer] = {
 }
 
 
+class PixelInfoLabel(QLabel):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setContentsMargins(10, 8, 10, 8)
+
+        font = self.font()
+        font.setFamily('Consolas')
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        font.setPointSize(10)
+        self.setFont(font)
+
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(244, 246, 248))
+        self.setPalette(palette)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor(255, 255, 255, 48), 1))
+        painter.setBrush(QColor(24, 28, 33, 224))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 6, 6)
+        painter.end()
+        super().paintEvent(event)
+
+
 def build_color_space(
     color_primary: str,
     color_transfer: str,
@@ -153,24 +188,12 @@ def build_color_space(
     )
 
 
-def decode_frame_to_rgb(
-    frame: bytes | bytearray | memoryview | np.ndarray[Any, Any],
-    color_space: ColorSpace,
-) -> np.ndarray[Any, Any]:
-    if isinstance(frame, (bytes, bytearray, memoryview)):
-        raw = np.frombuffer(frame, dtype=np.uint8)
-    else:
-        raw = np.asarray(frame, dtype=np.uint8)
-    rgb = color_space.convert2rgb(raw)
-    rgb = np.clip(rgb, 0.0, 1.0)
-    return np.asarray(rgb, dtype=np.float32)
-
-
 class SettingsDialog(QDialog):
     def __init__(
         self,
         data_format: dict[str, Any] | None = None,
         fps: int = 30,
+        loop: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -230,17 +253,19 @@ class SettingsDialog(QDialog):
         self.endian_check_box = QCheckBox()
         self.endian_check_box.setChecked(data_format.get('big_endian', False))
 
-        self.loop_check_box = QCheckBox()
-        self.loop_check_box.setChecked(data_format.get('loop', False))
-
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 120)
         self.fps_spin.setValue(fps)
 
-        header = QLabel('Configure how raw video files are interpreted.')
+        self.loop_check_box = QCheckBox()
+        self.loop_check_box.setChecked(loop)
+
+        header = QLabel('Configure how raw file is interpreted.')
         header.setWordWrap(True)
         header.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        header.setStyleSheet('font-size: 10pt;')
+        header_font = header.font()
+        header_font.setPointSize(10)
+        header.setFont(header_font)
 
         color_group = QGroupBox('Color pipeline')
         color_layout = QFormLayout(color_group)
@@ -322,11 +347,13 @@ class SettingsDialog(QDialog):
             'valid_max': float(self.max_input.text() or 0.0),
             'expanded': self.expanded_check_box.isChecked(),
             'big_endian': self.endian_check_box.isChecked(),
-            'loop': self.loop_check_box.isChecked(),
         }
 
     def fps(self) -> int:
         return self.fps_spin.value()
+
+    def loop(self) -> bool:
+        return self.loop_check_box.isChecked()
 
 
 class MainWindow(QMainWindow):
@@ -336,19 +363,21 @@ class MainWindow(QMainWindow):
         self.resize(960, 720)
         self.setAcceptDrops(True)
 
-        self.raw_bytes: np.memmap | None = None
+        self.source_file: Path | None = None
+        self.source_bytes: np.memmap | None = None
+        self.data_format: dict[str, Any] | None = None
         self.color_space: ColorSpace | None = None
         self.frame_size = 0
         self.frame_count = 0
-        self.current_frame = 0
-        self.current_frame_buffer: np.ndarray[Any, Any] | None = None
-        self.current_frame_index = -1
-        self.current_image: QImage | None = None
-        self.playing = False
-        self.current_file: Path | None = None
-        self.current_format: dict[str, Any] | None = None
-        self.fps = 30
+
+        self.frame_index: int | None = None
+        self.source_value: np.ndarray[Any, Any] | None = None
+        self.source_image: QImage | None = None
         self.zoom_level = 1.0
+
+        self.playing = False
+        self.fps = 30
+        self.loop = False
 
         self.create_menu_bar()
         self.create_content()
@@ -442,14 +471,23 @@ class MainWindow(QMainWindow):
     def create_content(self) -> None:
         self.content = QHBoxLayout()
 
-        self.image_label = QLabel('No file loaded')
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setMinimumSize(320, 240)
-        self.image_label.setSizePolicy(
+        self.image_info_label = QLabel('No file loaded')
+        self.image_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_info_label.setMinimumSize(320, 240)
+        self.image_info_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
+        self.image_info_label.setMouseTracking(True)
+        self.image_info_label.installEventFilter(self)
 
-        self.content.addWidget(self.image_label)
+        self.pixel_info_label = PixelInfoLabel(self.image_info_label)
+        self.pixel_info_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
+        self.pixel_info_label.setWordWrap(True)
+        self.pixel_info_label.hide()
+
+        self.content.addWidget(self.image_info_label)
 
     def create_footer(self) -> None:
         self.footer = QHBoxLayout()
@@ -497,146 +535,252 @@ class MainWindow(QMainWindow):
     def on_open(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            'Open raw video file',
+            'Open file',
             str(Path.home()),
-            'Raw video files (*.*)',
+            'All files (*.*)',
         )
         if not filename:
             return
         self.open_file(filename)
 
     def open_file(self, filename: str) -> None:
-        dialog = SettingsDialog(self.current_format, self.fps, self)
+        dialog = SettingsDialog(self.data_format, self.fps, self.loop, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
         self.fps = dialog.fps()
         self.update_timer_interval()
+        self.loop = dialog.loop()
 
         changed = False
 
         data_format = dialog.data_format()
-        if self.current_format != data_format:
-            self.current_format = data_format
+        if self.data_format != data_format:
+            self.data_format = data_format
             changed = True
 
-        if self.current_file != Path(filename):
-            self.current_file = Path(filename)
+        if self.source_file != Path(filename):
+            self.source_file = Path(filename)
             changed = True
 
         if changed:
             self.apply_format()
 
     def on_setup(self) -> None:
-        dialog = SettingsDialog(self.current_format, self.fps, self)
+        dialog = SettingsDialog(self.data_format, self.fps, self.loop, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
         self.fps = dialog.fps()
         self.update_timer_interval()
+        self.loop = dialog.loop()
 
         data_format = dialog.data_format()
-        if self.current_format != data_format:
-            self.current_format = data_format
-            if self.current_file:
+        if self.data_format != data_format:
+            self.data_format = data_format
+            if self.source_file:
                 self.apply_format()
 
     def apply_format(self) -> None:
-        if not self.current_format or not self.current_file:
+        if not self.data_format or not self.source_file:
             return
 
         color_space = build_color_space(
-            color_primary=self.current_format['primary'],
-            color_transfer=self.current_format['transfer'],
-            color_range=self.current_format['range'],
-            pixel_format=self.current_format['format'],
-            height=self.current_format['height'],
-            width=self.current_format['width'],
-            stride=self.current_format['stride'],
-            bits=self.current_format['bits'],
-            expanded=self.current_format['expanded'],
-            valid_min=self.current_format['valid_min'],
-            valid_max=self.current_format['valid_max'],
+            color_primary=self.data_format['primary'],
+            color_transfer=self.data_format['transfer'],
+            color_range=self.data_format['range'],
+            pixel_format=self.data_format['format'],
+            height=self.data_format['height'],
+            width=self.data_format['width'],
+            stride=self.data_format['stride'],
+            bits=self.data_format['bits'],
+            expanded=self.data_format['expanded'],
+            valid_min=self.data_format['valid_min'],
+            valid_max=self.data_format['valid_max'],
         )
 
-        self.raw_bytes = np.memmap(self.current_file, dtype=np.uint8, mode='r')
+        self.source_bytes = np.memmap(
+            self.source_file, dtype=np.uint8, mode='r'
+        )
         self.color_space = color_space
         self.frame_size = color_space.pixel_format.bytes_per_frame
-        self.frame_count = max(
-            1, math.ceil(self.raw_bytes.size / self.frame_size)
-        )
-        self.current_frame_buffer = None
-        self.current_frame_index = -1
-        self.current_image = None
-        self.current_frame = 0
-        self.loop_enabled = self.current_format.get('loop', False)
-        self.playing = False
-        self.zoom_level = 1.0
-        self.play_button.setText('▶️')
-        self.timer.stop()
+        self.frame_count = math.ceil(self.source_bytes.size / self.frame_size)
 
+        self.playing = False
+        self.display_current_frame(0)
+
+        self.slider.blockSignals(True)
         self.slider.setMaximum(max(0, self.frame_count - 1))
         self.slider.setValue(0)
         self.slider.setEnabled(self.frame_count > 1)
-        self.display_current_frame()
-        self.statusBar().showMessage(
-            f'{self.current_file.name} • {self.frame_count} frame(s)'
-        )
+        self.slider.blockSignals(False)
+        self.play_button.setText('▶️')
+        self.timer.stop()
+        self.statusBar().showMessage(self.source_file.name)
 
-    def display_current_frame(self) -> None:
-        if (
-            self.raw_bytes is None
-            or self.color_space is None
-            or self.frame_count <= 0
-            or self.frame_size <= 0
-        ):
-            self.image_label.setText('No file loaded')
+    def display_current_frame(self, frame_index: int) -> None:
+        if self.source_bytes is None or self.color_space is None:
+            self.image_info_label.setText('No file loaded')
+            self.pixel_info_label.hide()
             self.frame_info_label.setText('Frame 0 / 0')
-            self.slider.setValue(0)
             return
 
-        if self.current_frame_index != self.current_frame:
-            self.current_frame_buffer = self._load_frame(self.current_frame)
-            self.current_frame_index = self.current_frame
-            self.current_image = self._rgb_to_qimage(self.current_frame_buffer)
-
-        if self.current_image is None:
-            self.image_label.setText('No file loaded')
+        if self.frame_count <= 0 or self.frame_size <= 0:
+            self.image_info_label.setText('Empty file')
+            self.pixel_info_label.hide()
             self.frame_info_label.setText('Frame 0 / 0')
-            self.slider.setValue(0)
+            return
+
+        if self.frame_index != frame_index:
+            self.frame_index = frame_index
+            self.source_value = self._load_frame(frame_index)
+            self.source_image = self._value2image(self.source_value)
+
+        if self.source_image is None:
+            self.image_info_label.setText('No file loaded')
+            self.pixel_info_label.hide()
+            self.frame_info_label.setText('Frame 0 / 0')
             return
 
         scaled_size = QSize(
-            max(1, int(self.current_image.width() * self.zoom_level)),
-            max(1, int(self.current_image.height() * self.zoom_level)),
+            max(1, int(self.source_image.width() * self.zoom_level)),
+            max(1, int(self.source_image.height() * self.zoom_level)),
         )
-        self.image_label.setPixmap(
-            QPixmap.fromImage(self.current_image).scaled(
+        self.image_info_label.setPixmap(
+            QPixmap.fromImage(self.source_image).scaled(
                 scaled_size,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
         self.frame_info_label.setText(
-            f'Frame {self.current_frame + 1} / {self.frame_count}'
+            f'Frame {frame_index + 1} / {self.frame_count}'
         )
-        self.slider.blockSignals(True)
-        self.slider.setValue(self.current_frame)
-        self.slider.blockSignals(False)
+        self.refresh_hovered_pixel()
 
-    def _load_frame(self, index: int) -> np.ndarray[Any, Any]:
-        assert self.raw_bytes is not None and self.color_space is not None
+    def refresh_hovered_pixel(self) -> None:
+        position = self.image_info_label.mapFromGlobal(QCursor.pos())
+        if not self.image_info_label.rect().contains(position):
+            self.pixel_info_label.hide()
+            return
+        self._update_pixel_info(position)
+
+    def _load_frame(self, index: int) -> np.ndarray[Any, Any] | None:
+        if self.source_bytes is None or self.color_space is None:
+            return None
         start = index * self.frame_size
         end = start + self.frame_size
-        frame = self.raw_bytes[start:end]
+        frame = self.source_bytes[start:end]
         pad = self.frame_size - frame.size
         if pad > 0:
             frame = np.pad(frame, (0, pad))
-        return decode_frame_to_rgb(frame, self.color_space)
+        values = self.color_space.data2value(frame)
+        return values
 
-    def _rgb_to_qimage(self, rgb: np.ndarray[Any, Any]) -> QImage:
-        height, width = rgb.shape[:2]
+    def _update_pixel_info(self, position: QPoint) -> None:
+        image = self.source_image
+        pixmap = self.image_info_label.pixmap()
+        if (
+            image is None
+            or pixmap is None
+            or pixmap.isNull()
+            or self.color_space is None
+        ):
+            self.pixel_info_label.hide()
+            return
+
+        left = (self.image_info_label.width() - pixmap.width()) // 2
+        top = (self.image_info_label.height() - pixmap.height()) // 2
+        image_x = position.x() - left
+        image_y = position.y() - top
+        if not (
+            0 <= image_x < pixmap.width() and 0 <= image_y < pixmap.height()
+        ):
+            self.pixel_info_label.hide()
+            return
+
+        x = min(
+            image.width() - 1, int(image_x * image.width() / pixmap.width())
+        )
+        y = min(
+            image.height() - 1, int(image_y * image.height() / pixmap.height())
+        )
+        pixel_format = self.color_space.pixel_format
+        channel_names: tuple[str, ...]
+        if isinstance(pixel_format, (GRAY, GRAYF)):
+            channel_names = ('Y',)
+        elif isinstance(pixel_format, YUVFormat):
+            channel_names = ('Y', 'U', 'V')
+        elif isinstance(pixel_format, RGBFormat):
+            channel_names = ('R', 'G', 'B')
+        else:
+            self.pixel_info_label.hide()
+            return
+
+        if self.source_value is None:
+            self.pixel_info_label.hide()
+            return
+        values = self.source_value[y, x]
+        channel_values = ' '.join(
+            f'{name}:{value:g}'
+            for name, value in zip(
+                channel_names, values[: len(channel_names)], strict=False
+            )
+        )
+        self.pixel_info_label.setText(channel_values)
+        self._position_pixel_info(position)
+        self.pixel_info_label.show()
+
+    def _position_pixel_info(self, position: QPoint) -> None:
+        margin = 12
+        self.pixel_info_label.setMaximumWidth(
+            max(margin, self.image_info_label.width() - 2 * margin)
+        )
+        self.pixel_info_label.adjustSize()
+        max_x = (
+            self.image_info_label.width()
+            - self.pixel_info_label.width()
+            - margin
+        )
+        max_y = (
+            self.image_info_label.height()
+            - self.pixel_info_label.height()
+            - margin
+        )
+        x = position.x() + margin
+        y = position.y() + margin
+        if x > max_x:
+            x = position.x() - self.pixel_info_label.width() - margin
+        if y > max_y:
+            y = position.y() - self.pixel_info_label.height() - margin
+        if x < margin:
+            x = margin
+        elif x > max_x:
+            x = max_x
+        if y < margin:
+            y = margin
+        elif y > max_y:
+            y = max_y
+        self.pixel_info_label.move(x, y)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self.image_info_label:
+            if event.type() == QEvent.Type.MouseMove:
+                if isinstance(event, QMouseEvent):
+                    position = event.position().toPoint()
+                    self._update_pixel_info(position)
+            elif event.type() == QEvent.Type.Leave:
+                self.pixel_info_label.hide()
+            elif event.type() == QEvent.Type.Resize:
+                self.refresh_hovered_pixel()
+        return super().eventFilter(watched, event)
+
+    def _value2image(self, value: np.ndarray[Any, Any] | None) -> QImage | None:
+        if self.color_space is None or value is None:
+            return None
+        rgb = self.color_space.key2rgb(self.color_space.value2key(value))
         rgb8 = np.clip(rgb * 255.0, 0, 255).astype(np.uint8)
+        height, width = rgb8.shape[:2]
         return QImage(
             rgb8.tobytes(),
             width,
@@ -646,7 +790,7 @@ class MainWindow(QMainWindow):
         )
 
     def on_save(self) -> None:
-        if self.current_image is None:
+        if self.source_image is None:
             return
         filename, _ = QFileDialog.getSaveFileName(
             self,
@@ -657,7 +801,7 @@ class MainWindow(QMainWindow):
         if not filename:
             return
 
-        if not self.current_image.save(filename):
+        if not self.source_image.save(filename):
             self.statusBar().showMessage(f'Failed to save {filename}')
             return
         self.statusBar().showMessage(f'Saved {Path(filename).name}')
@@ -667,49 +811,48 @@ class MainWindow(QMainWindow):
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = 0
-        self.display_current_frame()
+        self.slider.setValue(0)
 
     def previous_frame(self) -> None:
         if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = max(0, self.current_frame - 1)
-        self.display_current_frame()
+        frame_index = max(0, self.slider.value() - 1)
+        self.slider.setValue(frame_index)
 
     def next_frame(self) -> None:
         if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = min(self.frame_count - 1, self.current_frame + 1)
-        self.display_current_frame()
+        frame_index = min(self.frame_count - 1, self.slider.value() + 1)
+        self.slider.setValue(frame_index)
 
     def last_frame(self) -> None:
         if self.frame_count <= 0:
             return
         if self.playing:
             self.timer.stop()
-        self.current_frame = self.frame_count - 1
-        self.display_current_frame()
+        frame_index = self.frame_count - 1
+        self.slider.setValue(frame_index)
 
     def advance_frame(self) -> None:
         if self.frame_count <= 0:
             return
-        if self.current_frame >= self.frame_count - 1:
-            if self.loop_enabled:
-                self.current_frame = 0
-                self.display_current_frame()
+        frame_index = self.slider.value()
+        if frame_index < self.frame_count - 1:
+            frame_index += 1
+            self.slider.setValue(frame_index)
+        else:
+            if self.loop:
+                self.slider.setValue(0)
             else:
                 self.playing = False
                 self.play_button.setText('▶️')
                 self.play_action.setIconText('▶️')
                 self.play_action.setText('▶️ Play / Pause')
                 self.timer.stop()
-        else:
-            self.current_frame += 1
-            self.display_current_frame()
 
     def toggle_play(self) -> None:
         if self.frame_count <= 0:
@@ -727,23 +870,25 @@ class MainWindow(QMainWindow):
             self.timer.stop()
 
     def on_slider_changed(self, value: int) -> None:
-        self.current_frame = value
-        self.display_current_frame()
+        self.display_current_frame(value)
 
     def update_timer_interval(self) -> None:
         self.timer.setInterval(int(1000 / self.fps))
 
     def zoom_in(self) -> None:
         self.zoom_level = min(5.0, self.zoom_level + 0.25)
-        self.display_current_frame()
+        frame_index = self.slider.value()
+        self.display_current_frame(frame_index)
 
     def zoom_out(self) -> None:
         self.zoom_level = max(0.25, self.zoom_level - 0.25)
-        self.display_current_frame()
+        frame_index = self.slider.value()
+        self.display_current_frame(frame_index)
 
     def reset_zoom(self) -> None:
         self.zoom_level = 1.0
-        self.display_current_frame()
+        frame_index = self.slider.value()
+        self.display_current_frame(frame_index)
 
     def toggle_fullscreen(self) -> None:
         if self.isFullScreen():
@@ -791,7 +936,8 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         if self.frame_count > 0:
-            self.display_current_frame()
+            frame_index = self.slider.value()
+            self.display_current_frame(frame_index)
 
 
 def main() -> None:

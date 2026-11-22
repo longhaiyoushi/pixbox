@@ -47,14 +47,25 @@ class ColorSpace:
     def yuv2rgb(self, yuv: NDArray[np.float32]) -> NDArray[np.float32]:
         return self.color_primaries.yuv2rgb(yuv, self.color_range)
 
-    def data2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
+    def data2value(self, value: NDArray[np.uint8]) -> NDArray[Any]:
+        return self.pixel_format.data2value(value)
+
+    def value2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
+        return self.pixel_format.value2key(value)
+
+    def data2key(self, value: NDArray[np.uint8]) -> NDArray[np.float32]:
         return self.pixel_format.data2key(value)
 
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[Any]:
+    def key2value(self, value: NDArray[np.float32]) -> NDArray[Any]:
+        return self.pixel_format.key2value(value)
+
+    def value2data(self, value: NDArray[Any]) -> NDArray[np.uint8]:
+        return self.pixel_format.value2data(value)
+
+    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
         return self.pixel_format.key2data(value)
 
-    def convert2rgb(self, value: NDArray[Any]) -> NDArray[np.float32]:
-        value = self.data2key(value)
+    def key2rgb(self, value: NDArray[np.float32]) -> NDArray[np.float32]:
         if isinstance(self.pixel_format, YUVFormat):
             value = self.yuv2rgb(value)
         elif isinstance(self.pixel_format, XYZFormat):

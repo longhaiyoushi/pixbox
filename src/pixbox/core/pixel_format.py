@@ -48,15 +48,31 @@ class PixelFormat:
             'bytes_per_frame not implemented for this pixel format.'
         )
 
-    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
+    def data2value(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         raise NotImplementedError(
-            'data2key not implemented for this pixel format.'
+            'data2value not implemented for this pixel format.'
+        )
+
+    def value2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
+        raise NotImplementedError(
+            'value2key not implemented for this pixel format.'
+        )
+
+    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
+        return self.value2key(self.data2value(value8))
+
+    def key2value(self, value: NDArray[np.float32]) -> NDArray[Any]:
+        raise NotImplementedError(
+            'key2value not implemented for this pixel format.'
+        )
+
+    def value2data(self, value: NDArray[Any]) -> NDArray[np.uint8]:
+        raise NotImplementedError(
+            'value2data not implemented for this pixel format.'
         )
 
     def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
-        raise NotImplementedError(
-            'key2data not implemented for this pixel format.'
-        )
+        return self.value2data(self.key2value(value))
 
 
 class ChromaOrder(Enum):
@@ -172,17 +188,21 @@ class YUVFormat(PixelFormat):
                     value8 = value.view(np.uint8)
         return value8
 
-    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
-        value = self.to_yuv(value8)
+    def data2value(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
+        return self.to_yuv(value8)
+
+    def value2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
         value = (value - self.min) / (self.max - self.min)
         value = np.astype(value, np.float32)
         return value
 
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
+    def key2value(self, value: NDArray[np.float32]) -> NDArray[Any]:
         value = value * (self.max - self.min) + self.min
         value = np.astype(value, self.dtype)
-        value8 = self.from_yuv(value)
-        return value8
+        return value
+
+    def value2data(self, value: NDArray[Any]) -> NDArray[np.uint8]:
+        return self.from_yuv(value)
 
     def to_yuv(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         raise NotImplementedError(
@@ -687,17 +707,21 @@ class YUV444_NV42(YUV444SemiPlanar):
 
 @dataclass
 class RGBFormat(PixelFormat):
-    def data2key(self, value8: NDArray[np.uint8]) -> NDArray[np.float32]:
-        value = self.to_rgb(value8)
+    def data2value(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
+        return self.to_rgb(value8)
+
+    def value2key(self, value: NDArray[Any]) -> NDArray[np.float32]:
         value = (value - self.min) / (self.max - self.min)
         value = np.astype(value, np.float32)
         return value
 
-    def key2data(self, value: NDArray[np.float32]) -> NDArray[np.uint8]:
+    def key2value(self, value: NDArray[np.float32]) -> NDArray[Any]:
         value = value * (self.max - self.min) + self.min
         value = np.astype(value, self.dtype)
-        value8 = self.from_rgb(value)
-        return value8
+        return value
+
+    def value2data(self, value: NDArray[Any]) -> NDArray[np.uint8]:
+        return self.from_rgb(value)
 
     def to_rgb(self, value8: NDArray[np.uint8]) -> NDArray[Any]:
         raise NotImplementedError(
